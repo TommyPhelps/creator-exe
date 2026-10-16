@@ -1,11 +1,20 @@
 #!/usr/bin/env bash
-# Publishes the tail of a log as a single GitHub annotation so failures can be
-# read through the checks API (raw Actions logs are not always reachable).
-# usage: ci-annotate.sh <error|notice> <title> <logfile>
-level="$1"; title="$2"; file="$3"
+# Publishes the useful tail of a log as GitHub annotations so failures can be
+# read through the checks API. Progress noise (Compiling/Downloaded...) is
+# dropped and the rest is split into 4000-character chunks (GitHub's limit).
+# usage: ci-annotate.sh <error|notice> <title> <logfile> [max_chunks]
+level="$1"; title="$2"; file="$3"; max="${4:-8}"
 [ -f "$file" ] || exit 0
-msg=$(tail -c 30000 "$file" | sed -e 's/\x1b\[[0-9;]*m//g')
-msg="${msg//'%'/'%25'}"
-msg="${msg//$'\r'/'%0D'}"
-msg="${msg//$'\n'/'%0A'}"
-echo "::${level} title=${title}::${msg}"
+filtered=$(sed -e 's/\x1b\[[0-9;]*m//g' "$file" \
+  | grep -Ev '^\s*(Downloaded|Downloading|Compiling|Locking|Adding|Updating|Fresh|Checking|Blocking|Packaging|Installing|Fetching)\b' \
+  | tail -c $((max * 3900)))
+total=${#filtered}
+i=0; part=1
+while [ $i -lt $total ] && [ $part -le $max ]; do
+  chunk="${filtered:$i:3900}"
+  chunk="${chunk//'%'/'%25'}"
+  chunk="${chunk//$'\r'/'%0D'}"
+  chunk="${chunk//$'\n'/'%0A'}"
+  echo "::${level} title=${title} (${part})::${chunk}"
+  i=$((i + 3900)); part=$((part + 1))
+done

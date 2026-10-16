@@ -1,0 +1,735 @@
+// Typed repositories over the SQLite schema. Every function takes the Db so it
+// runs identically in the Windows app and in tests.
+
+import type { Db } from "../platform/types.ts";
+import { newId, nowIso, parseJson } from "../lib/util.ts";
+import type {
+  Complexity,
+  Durability,
+  EvidenceSource,
+  FeedbackFlag,
+  Idea,
+  IdeaDetails,
+  IdeaFeedback,
+  IdeaOrigin,
+  IdeaStatus,
+  PackageContent,
+  ProfileItem,
+  ProfileKind,
+  Project,
+  ProjectDetails,
+  ProjectEvent,
+  ProjectTask,
+  Reaction,
+  ResearchItem,
+  Stage,
+  TaskList,
+  ThumbnailRecord,
+  TitleCandidate,
+  UploadPackage,
+  Video,
+  VideoFeedback,
+  VideoMetric,
+} from "../domain/types.ts";
+
+type Row = Record<string, unknown>;
+const str = (v: unknown): string => (typeof v === "string" ? v : v === null || v === undefined ? "" : String(v));
+const strOrNull = (v: unknown): string | null => (v === null || v === undefined ? null : String(v));
+const num = (v: unknown): number => (typeof v === "number" ? v : Number(v ?? 0));
+const numOrNull = (v: unknown): number | null => (v === null || v === undefined ? null : Number(v));
+
+// ---------------------------------------------------------------- settings
+
+export async function getSetting<T>(db: Db, key: string, fallback: T): Promise<T> {
+  const rows = await db.select<Row>("SELECT value FROM settings WHERE key = ?", [key]);
+  return rows[0] ? parseJson<T>(rows[0].value, fallback) : fallback;
+}
+
+export async function setSetting(db: Db, key: string, value: unknown): Promise<void> {
+  await db.execute(
+    "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+    [key, JSON.stringify(value)],
+  );
+}
+
+// ---------------------------------------------------------------- profile
+
+const toProfile = (r: Row): ProfileItem => ({
+  id: str(r.id),
+  kind: str(r.kind) as ProfileKind,
+  value: str(r.value),
+  durability: str(r.durability) as Durability,
+  note: str(r.note),
+  createdAt: str(r.created_at),
+  updatedAt: str(r.updated_at),
+});
+
+export async function listProfile(db: Db): Promise<ProfileItem[]> {
+  return (await db.select<Row>("SELECT * FROM profile_items ORDER BY kind, created_at")).map(toProfile);
+}
+
+export async function addProfileItem(
+  db: Db,
+  kind: ProfileKind,
+  value: string,
+  durability: Durability = "enduring",
+  note = "",
+): Promise<ProfileItem> {
+  const t = nowIso();
+  const item: ProfileItem = { id: newId(), kind, value: value.trim(), durability, note, createdAt: t, updatedAt: t };
+  await db.execute(
+    "INSERT INTO profile_items (id, kind, value, durability, note, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+    [item.id, kind, item.value, durability, note, t, t],
+  );
+  return item;
+}
+
+export async function updateProfileItem(db: Db, id: string, patch: Partial<Pick<ProfileItem, "value" | "durability" | "note" | "kind">>): Promise<void> {
+  const rows = await db.select<Row>("SELECT * FROM profile_items WHERE id = ?", [id]);
+  if (!rows[0]) return;
+  const cur = toProfile(rows[0]);
+  const next = { ...cur, ...patch };
+  await db.execute("UPDATE profile_items SET kind = ?, value = ?, durability = ?, note = ?, updated_at = ? WHERE id = ?", [
+    next.kind,
+    next.value,
+    next.durability,
+    next.note,
+    nowIso(),
+    id,
+  ]);
+}
+
+export async function deleteProfileItem(db: Db, id: string): Promise<void> {
+  await db.execute("DELETE FROM profile_items WHERE id = ?", [id]);
+}
+
+// ---------------------------------------------------------------- videos
+
+const toVideo = (r: Row): Video => ({
+  id: str(r.id),
+  title: str(r.title),
+  description: str(r.description),
+  publishedAt: strOrNull(r.published_at),
+  durationSeconds: numOrNull(r.duration_seconds),
+  thumbnailUrl: strOrNull(r.thumbnail_url),
+  availability: str(r.availability) as Video["availability"],
+  firstSource: str(r.first_source) as EvidenceSource,
+  lastSyncedAt: strOrNull(r.last_synced_at),
+  userCategory: str(r.user_category),
+  userFormat: str(r.user_format),
+  userEffort: numOrNull(r.user_effort),
+  userNotes: str(r.user_notes),
+  relatedProjectId: strOrNull(r.related_project_id),
+  createdAt: str(r.created_at),
+  updatedAt: str(r.updated_at),
+});
+
+export async function listVideos(db: Db): Promise<Video[]> {
+  return (await db.select<Row>("SELECT * FROM videos ORDER BY COALESCE(published_at, created_at) DESC")).map(toVideo);
+}
+
+export async function getVideo(db: Db, id: string): Promise<Video | null> {
+  const rows = await db.select<Row>("SELECT * FROM videos WHERE id = ?", [id]);
+  return rows[0] ? toVideo(rows[0]) : null;
+}
+
+export async function updateVideoAnnotations(
+  db: Db,
+  id: string,
+  patch: Partial<Pick<Video, "userCategory" | "userFormat" | "userEffort" | "userNotes" | "relatedProjectId">>,
+): Promise<void> {
+  const v = await getVideo(db, id);
+  if (!v) return;
+  const n = { ...v, ...patch };
+  await db.execute(
+    "UPDATE videos SET user_category = ?, user_format = ?, user_effort = ?, user_notes = ?, related_project_id = ?, updated_at = ? WHERE id = ?",
+    [n.userCategory, n.userFormat, n.userEffort, n.userNotes, n.relatedProjectId, nowIso(), id],
+  );
+}
+
+export async function addManualVideo(db: Db, input: { id?: string; title: string; publishedAt?: string | null; durationSeconds?: number | null; description?: string }): Promise<Video> {
+  const t = nowIso();
+  const id = input.id?.trim() || `manual-${newId()}`;
+  await db.execute(
+    `INSERT INTO videos (id, title, description, published_at, duration_seconds, thumbnail_url, availability, first_source, last_synced_at, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, 'unknown', 'manual', NULL, ?, ?)`,
+    [id, input.title.trim(), input.description ?? "", input.publishedAt ?? null, input.durationSeconds ?? null, input.id ? `https://i.ytimg.com/vi/${input.id}/mqdefault.jpg` : null, t, t],
+  );
+  const v = await getVideo(db, id);
+  if (!v) throw new Error("video insert failed");
+  return v;
+}
+
+export async function deleteVideo(db: Db, id: string): Promise<void> {
+  await db.execute("DELETE FROM videos WHERE id = ?", [id]);
+}
+
+export async function deleteAllChannelData(db: Db): Promise<void> {
+  await db.batch([{ sql: "DELETE FROM video_metrics" }, { sql: "DELETE FROM video_feedback" }, { sql: "DELETE FROM videos" }]);
+}
+
+const toMetric = (r: Row): VideoMetric => ({
+  videoId: str(r.video_id),
+  metric: str(r.metric),
+  source: str(r.source) as EvidenceSource,
+  value: num(r.value),
+  capturedAt: str(r.captured_at),
+});
+
+export async function listMetrics(db: Db, videoId?: string): Promise<VideoMetric[]> {
+  const rows = videoId
+    ? await db.select<Row>("SELECT * FROM video_metrics WHERE video_id = ? ORDER BY metric", [videoId])
+    : await db.select<Row>("SELECT * FROM video_metrics ORDER BY video_id, metric");
+  return rows.map(toMetric);
+}
+
+export async function setManualMetric(db: Db, videoId: string, metric: string, value: number | null): Promise<void> {
+  if (value === null || !Number.isFinite(value)) {
+    await db.execute("DELETE FROM video_metrics WHERE video_id = ? AND metric = ? AND source = 'manual'", [videoId, metric]);
+    return;
+  }
+  await db.execute(
+    `INSERT INTO video_metrics (video_id, metric, source, value, captured_at) VALUES (?, ?, 'manual', ?, ?)
+     ON CONFLICT(video_id, metric, source) DO UPDATE SET value = excluded.value, captured_at = excluded.captured_at`,
+    [videoId, metric, value, nowIso()],
+  );
+}
+
+const toFeedback = (r: Row): VideoFeedback => ({
+  videoId: str(r.video_id),
+  flags: parseJson<FeedbackFlag[]>(r.flags, []),
+  enjoyOverall: numOrNull(r.enjoy_overall),
+  enjoyRecording: numOrNull(r.enjoy_recording),
+  enjoyEditing: numOrNull(r.enjoy_editing),
+  pride: numOrNull(r.pride),
+  effort: numOrNull(r.effort),
+  revisit: numOrNull(r.revisit),
+  updatedAt: str(r.updated_at),
+});
+
+export async function listVideoFeedback(db: Db): Promise<VideoFeedback[]> {
+  return (await db.select<Row>("SELECT * FROM video_feedback")).map(toFeedback);
+}
+
+export async function saveVideoFeedback(db: Db, fb: Omit<VideoFeedback, "updatedAt">): Promise<void> {
+  await db.execute(
+    `INSERT INTO video_feedback (video_id, flags, enjoy_overall, enjoy_recording, enjoy_editing, pride, effort, revisit, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(video_id) DO UPDATE SET flags = excluded.flags, enjoy_overall = excluded.enjoy_overall,
+       enjoy_recording = excluded.enjoy_recording, enjoy_editing = excluded.enjoy_editing, pride = excluded.pride,
+       effort = excluded.effort, revisit = excluded.revisit, updated_at = excluded.updated_at`,
+    [fb.videoId, JSON.stringify(fb.flags), fb.enjoyOverall, fb.enjoyRecording, fb.enjoyEditing, fb.pride, fb.effort, fb.revisit, nowIso()],
+  );
+}
+
+// ---------------------------------------------------------------- ideas
+
+const toIdea = (r: Row): Idea => ({
+  id: str(r.id),
+  origin: str(r.origin) as IdeaOrigin,
+  libraryKey: strOrNull(r.library_key),
+  title: str(r.title),
+  premise: str(r.premise),
+  details: parseJson<IdeaDetails | null>(r.details, null),
+  subjects: parseJson<string[]>(r.subjects, []),
+  status: str(r.status) as IdeaStatus,
+  priority: num(r.priority),
+  createdAt: str(r.created_at),
+  updatedAt: str(r.updated_at),
+});
+
+export async function listIdeas(db: Db, statuses?: IdeaStatus[]): Promise<Idea[]> {
+  if (statuses && statuses.length) {
+    const q = statuses.map(() => "?").join(",");
+    return (await db.select<Row>(`SELECT * FROM ideas WHERE status IN (${q}) ORDER BY priority DESC, updated_at DESC`, statuses)).map(toIdea);
+  }
+  return (await db.select<Row>("SELECT * FROM ideas ORDER BY priority DESC, updated_at DESC")).map(toIdea);
+}
+
+export async function getIdea(db: Db, id: string): Promise<Idea | null> {
+  const rows = await db.select<Row>("SELECT * FROM ideas WHERE id = ?", [id]);
+  return rows[0] ? toIdea(rows[0]) : null;
+}
+
+export async function findIdeaByKey(db: Db, key: string): Promise<Idea | null> {
+  const rows = await db.select<Row>("SELECT * FROM ideas WHERE library_key = ? ORDER BY updated_at DESC LIMIT 1", [key]);
+  return rows[0] ? toIdea(rows[0]) : null;
+}
+
+export async function saveIdea(
+  db: Db,
+  input: { origin: IdeaOrigin; libraryKey?: string | null; title: string; premise?: string; details?: IdeaDetails | null; subjects?: string[]; status?: IdeaStatus; priority?: number },
+): Promise<Idea> {
+  if (input.libraryKey) {
+    const existing = await findIdeaByKey(db, input.libraryKey);
+    if (existing) {
+      if (input.status && input.status !== existing.status) await setIdeaStatus(db, existing.id, input.status);
+      return (await getIdea(db, existing.id)) ?? existing;
+    }
+  }
+  const t = nowIso();
+  const idea: Idea = {
+    id: newId(),
+    origin: input.origin,
+    libraryKey: input.libraryKey ?? null,
+    title: input.title.trim(),
+    premise: input.premise?.trim() ?? "",
+    details: input.details ?? null,
+    subjects: input.subjects ?? [],
+    status: input.status ?? "inbox",
+    priority: input.priority ?? 0,
+    createdAt: t,
+    updatedAt: t,
+  };
+  await db.execute(
+    "INSERT INTO ideas (id, origin, library_key, title, premise, details, subjects, status, priority, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    [idea.id, idea.origin, idea.libraryKey, idea.title, idea.premise, JSON.stringify(idea.details), JSON.stringify(idea.subjects), idea.status, idea.priority, t, t],
+  );
+  return idea;
+}
+
+export async function updateIdea(db: Db, id: string, patch: Partial<Pick<Idea, "title" | "premise" | "priority" | "status" | "subjects">>): Promise<void> {
+  const cur = await getIdea(db, id);
+  if (!cur) return;
+  const n = { ...cur, ...patch };
+  await db.execute("UPDATE ideas SET title = ?, premise = ?, priority = ?, status = ?, subjects = ?, updated_at = ? WHERE id = ?", [
+    n.title,
+    n.premise,
+    n.priority,
+    n.status,
+    JSON.stringify(n.subjects),
+    nowIso(),
+    id,
+  ]);
+}
+
+export async function setIdeaStatus(db: Db, id: string, status: IdeaStatus): Promise<void> {
+  await db.execute("UPDATE ideas SET status = ?, updated_at = ? WHERE id = ?", [status, nowIso(), id]);
+}
+
+export async function deleteIdea(db: Db, id: string): Promise<void> {
+  await db.execute("DELETE FROM ideas WHERE id = ?", [id]);
+}
+
+const toFeedbackRow = (r: Row): IdeaFeedback => ({
+  id: str(r.id),
+  ideaKey: str(r.idea_key),
+  reaction: str(r.reaction) as Reaction,
+  subjects: parseJson<string[]>(r.subjects, []),
+  createdAt: str(r.created_at),
+});
+
+export async function recordIdeaFeedback(db: Db, ideaKey: string, reaction: Reaction, subjects: string[]): Promise<IdeaFeedback> {
+  const fb: IdeaFeedback = { id: newId(), ideaKey, reaction, subjects, createdAt: nowIso() };
+  await db.execute("INSERT INTO idea_feedback (id, idea_key, reaction, subjects, created_at) VALUES (?, ?, ?, ?, ?)", [
+    fb.id,
+    ideaKey,
+    reaction,
+    JSON.stringify(subjects),
+    fb.createdAt,
+  ]);
+  return fb;
+}
+
+export async function listIdeaFeedback(db: Db): Promise<IdeaFeedback[]> {
+  return (await db.select<Row>("SELECT * FROM idea_feedback ORDER BY created_at DESC")).map(toFeedbackRow);
+}
+
+export async function deleteIdeaFeedback(db: Db, id: string): Promise<void> {
+  await db.execute("DELETE FROM idea_feedback WHERE id = ?", [id]);
+}
+
+export async function recordImpressions(db: Db, keys: string[]): Promise<void> {
+  const t = nowIso();
+  if (!keys.length) return;
+  await db.batch(keys.map((k) => ({ sql: "INSERT INTO idea_impressions (idea_key, shown_at) VALUES (?, ?)", params: [k, t] })));
+  // Keep the table small: only the last 400 impressions matter for variety.
+  await db.execute(
+    "DELETE FROM idea_impressions WHERE rowid NOT IN (SELECT rowid FROM idea_impressions ORDER BY shown_at DESC LIMIT 400)",
+  );
+}
+
+export async function listImpressions(db: Db): Promise<{ ideaKey: string; shownAt: string }[]> {
+  return (await db.select<Row>("SELECT idea_key, shown_at FROM idea_impressions ORDER BY shown_at DESC")).map((r) => ({
+    ideaKey: str(r.idea_key),
+    shownAt: str(r.shown_at),
+  }));
+}
+
+// ---------------------------------------------------------------- projects
+
+export const EMPTY_DETAILS: ProjectDetails = {
+  research: "",
+  recordingRequirements: "",
+  equipment: "",
+  locations: "",
+  questions: "",
+  thingsToCapture: "",
+  references: "",
+  structure: "",
+  assets: "",
+  thumbnailConcepts: "",
+  uploadInfo: "",
+  notes: "",
+  links: [],
+  customStatus: "",
+  origin: "",
+};
+
+const toProject = (r: Row): Project => ({
+  id: str(r.id),
+  title: str(r.title),
+  premise: str(r.premise),
+  why: str(r.why),
+  stage: str(r.stage) as Stage,
+  complexity: str(r.complexity) as Complexity,
+  priority: num(r.priority),
+  nextAction: str(r.next_action),
+  folderPath: strOrNull(r.folder_path),
+  ideaId: strOrNull(r.idea_id),
+  subjects: parseJson<string[]>(r.subjects, []),
+  details: { ...EMPTY_DETAILS, ...parseJson<Partial<ProjectDetails>>(r.details, {}) },
+  archived: num(r.archived) === 1,
+  createdAt: str(r.created_at),
+  updatedAt: str(r.updated_at),
+  openedAt: strOrNull(r.opened_at),
+});
+
+export async function listProjects(db: Db, includeArchived = false): Promise<Project[]> {
+  const sql = includeArchived
+    ? "SELECT * FROM projects ORDER BY priority DESC, updated_at DESC"
+    : "SELECT * FROM projects WHERE archived = 0 ORDER BY priority DESC, updated_at DESC";
+  return (await db.select<Row>(sql)).map(toProject);
+}
+
+export async function getProject(db: Db, id: string): Promise<Project | null> {
+  const rows = await db.select<Row>("SELECT * FROM projects WHERE id = ?", [id]);
+  return rows[0] ? toProject(rows[0]) : null;
+}
+
+export interface NewProjectInput {
+  title: string;
+  premise?: string;
+  why?: string;
+  complexity?: Complexity;
+  nextAction?: string;
+  ideaId?: string | null;
+  subjects?: string[];
+  details?: Partial<ProjectDetails>;
+  tasks?: { list: TaskList; label: string }[];
+  stage?: Stage;
+}
+
+export async function createProject(db: Db, input: NewProjectInput): Promise<Project> {
+  const t = nowIso();
+  const id = newId();
+  const details: ProjectDetails = { ...EMPTY_DETAILS, ...(input.details ?? {}) };
+  const statements = [
+    {
+      sql: `INSERT INTO projects (id, title, premise, why, stage, complexity, priority, next_action, folder_path, idea_id, subjects, details, archived, created_at, updated_at, opened_at)
+            VALUES (?, ?, ?, ?, ?, ?, 0, ?, NULL, ?, ?, ?, 0, ?, ?, ?)`,
+      params: [
+        id,
+        input.title.trim() || "Untitled video",
+        input.premise ?? "",
+        input.why ?? "",
+        input.stage ?? "idea",
+        input.complexity ?? "standard",
+        input.nextAction ?? "",
+        input.ideaId ?? null,
+        JSON.stringify(input.subjects ?? []),
+        JSON.stringify(details),
+        t,
+        t,
+        t,
+      ],
+    },
+    {
+      sql: "INSERT INTO project_events (id, project_id, kind, detail, created_at) VALUES (?, ?, 'created', ?, ?)",
+      params: [newId(), id, input.ideaId ? "Started from a saved idea" : "Project initialized", t],
+    },
+    ...(input.tasks ?? []).map((task, i) => ({
+      sql: "INSERT INTO project_tasks (id, project_id, list, label, done, position, created_at) VALUES (?, ?, ?, ?, 0, ?, ?)",
+      params: [newId(), id, task.list, task.label, i, t],
+    })),
+  ];
+  if (input.ideaId) {
+    statements.push({ sql: "UPDATE ideas SET status = 'started', updated_at = ? WHERE id = ?", params: [t, input.ideaId] });
+  }
+  await db.batch(statements);
+  const p = await getProject(db, id);
+  if (!p) throw new Error("project insert failed");
+  return p;
+}
+
+export type ProjectPatch = Partial<Pick<Project, "title" | "premise" | "why" | "stage" | "complexity" | "priority" | "nextAction" | "folderPath" | "subjects" | "archived">> & {
+  details?: Partial<ProjectDetails>;
+};
+
+export async function updateProject(db: Db, id: string, patch: ProjectPatch): Promise<Project | null> {
+  const cur = await getProject(db, id);
+  if (!cur) return null;
+  const n: Project = { ...cur, ...patch, details: { ...cur.details, ...(patch.details ?? {}) } };
+  const t = nowIso();
+  const statements = [
+    {
+      sql: `UPDATE projects SET title = ?, premise = ?, why = ?, stage = ?, complexity = ?, priority = ?, next_action = ?, folder_path = ?,
+            subjects = ?, details = ?, archived = ?, updated_at = ? WHERE id = ?`,
+      params: [n.title, n.premise, n.why, n.stage, n.complexity, n.priority, n.nextAction, n.folderPath, JSON.stringify(n.subjects), JSON.stringify(n.details), n.archived ? 1 : 0, t, id],
+    },
+  ];
+  if (patch.stage && patch.stage !== cur.stage) {
+    statements.push({
+      sql: "INSERT INTO project_events (id, project_id, kind, detail, created_at) VALUES (?, ?, 'stage', ?, ?)",
+      params: [newId(), id, `${cur.stage} -> ${patch.stage}`, t],
+    });
+  }
+  if (patch.archived !== undefined && patch.archived !== cur.archived) {
+    statements.push({
+      sql: "INSERT INTO project_events (id, project_id, kind, detail, created_at) VALUES (?, ?, 'archive', ?, ?)",
+      params: [newId(), id, patch.archived ? "Archived" : "Restored from archive", t],
+    });
+  }
+  await db.batch(statements);
+  return getProject(db, id);
+}
+
+export async function touchProject(db: Db, id: string): Promise<void> {
+  await db.execute("UPDATE projects SET opened_at = ? WHERE id = ?", [nowIso(), id]);
+}
+
+export async function deleteProject(db: Db, id: string): Promise<void> {
+  await db.execute("DELETE FROM projects WHERE id = ?", [id]);
+}
+
+export async function logProjectEvent(db: Db, projectId: string, kind: string, detail: string): Promise<void> {
+  await db.execute("INSERT INTO project_events (id, project_id, kind, detail, created_at) VALUES (?, ?, ?, ?, ?)", [newId(), projectId, kind, detail, nowIso()]);
+}
+
+export async function listProjectEvents(db: Db, projectId: string): Promise<ProjectEvent[]> {
+  return (await db.select<Row>("SELECT * FROM project_events WHERE project_id = ? ORDER BY created_at DESC", [projectId])).map((r) => ({
+    id: str(r.id),
+    projectId: str(r.project_id),
+    kind: str(r.kind),
+    detail: str(r.detail),
+    createdAt: str(r.created_at),
+  }));
+}
+
+const toTask = (r: Row): ProjectTask => ({
+  id: str(r.id),
+  projectId: str(r.project_id),
+  list: str(r.list) as TaskList,
+  label: str(r.label),
+  done: num(r.done) === 1,
+  position: num(r.position),
+  createdAt: str(r.created_at),
+});
+
+export async function listTasks(db: Db, projectId?: string): Promise<ProjectTask[]> {
+  const rows = projectId
+    ? await db.select<Row>("SELECT * FROM project_tasks WHERE project_id = ? ORDER BY list, position", [projectId])
+    : await db.select<Row>("SELECT * FROM project_tasks ORDER BY project_id, list, position");
+  return rows.map(toTask);
+}
+
+export async function addTask(db: Db, projectId: string, list: TaskList, label: string): Promise<ProjectTask> {
+  const rows = await db.select<Row>("SELECT COALESCE(MAX(position), -1) + 1 AS p FROM project_tasks WHERE project_id = ? AND list = ?", [projectId, list]);
+  const task: ProjectTask = { id: newId(), projectId, list, label: label.trim(), done: false, position: num(rows[0]?.p), createdAt: nowIso() };
+  await db.execute("INSERT INTO project_tasks (id, project_id, list, label, done, position, created_at) VALUES (?, ?, ?, ?, 0, ?, ?)", [
+    task.id,
+    projectId,
+    list,
+    task.label,
+    task.position,
+    task.createdAt,
+  ]);
+  return task;
+}
+
+export async function setTaskDone(db: Db, id: string, done: boolean): Promise<void> {
+  await db.execute("UPDATE project_tasks SET done = ? WHERE id = ?", [done ? 1 : 0, id]);
+}
+
+export async function renameTask(db: Db, id: string, label: string): Promise<void> {
+  await db.execute("UPDATE project_tasks SET label = ? WHERE id = ?", [label, id]);
+}
+
+export async function deleteTask(db: Db, id: string): Promise<void> {
+  await db.execute("DELETE FROM project_tasks WHERE id = ?", [id]);
+}
+
+// ---------------------------------------------------------------- research
+
+const toResearch = (r: Row): ResearchItem => ({
+  id: str(r.id),
+  projectId: strOrNull(r.project_id),
+  kind: str(r.kind) as ResearchItem["kind"],
+  title: str(r.title),
+  url: str(r.url),
+  publisher: str(r.publisher),
+  publishedAt: str(r.published_at),
+  checkedAt: strOrNull(r.checked_at),
+  sourceType: str(r.source_type) as ResearchItem["sourceType"],
+  verification: str(r.verification) as ResearchItem["verification"],
+  summary: str(r.summary),
+  myNotes: str(r.my_notes),
+  createdAt: str(r.created_at),
+  updatedAt: str(r.updated_at),
+});
+
+export async function listResearch(db: Db, projectId?: string | null): Promise<ResearchItem[]> {
+  if (projectId === undefined) return (await db.select<Row>("SELECT * FROM research_items ORDER BY updated_at DESC")).map(toResearch);
+  if (projectId === null) return (await db.select<Row>("SELECT * FROM research_items WHERE project_id IS NULL ORDER BY updated_at DESC")).map(toResearch);
+  return (await db.select<Row>("SELECT * FROM research_items WHERE project_id = ? ORDER BY created_at", [projectId])).map(toResearch);
+}
+
+export type ResearchInput = Partial<Omit<ResearchItem, "id" | "createdAt" | "updatedAt">> & { title: string };
+
+export async function saveResearch(db: Db, input: ResearchInput & { id?: string }): Promise<ResearchItem> {
+  const t = nowIso();
+  if (input.id) {
+    const rows = await db.select<Row>("SELECT * FROM research_items WHERE id = ?", [input.id]);
+    if (rows[0]) {
+      const n = { ...toResearch(rows[0]), ...input };
+      await db.execute(
+        `UPDATE research_items SET project_id = ?, kind = ?, title = ?, url = ?, publisher = ?, published_at = ?, checked_at = ?, source_type = ?,
+         verification = ?, summary = ?, my_notes = ?, updated_at = ? WHERE id = ?`,
+        [n.projectId, n.kind, n.title, n.url, n.publisher, n.publishedAt, n.checkedAt, n.sourceType, n.verification, n.summary, n.myNotes, t, n.id],
+      );
+      return { ...n, updatedAt: t };
+    }
+  }
+  const item: ResearchItem = {
+    id: input.id ?? newId(),
+    projectId: input.projectId ?? null,
+    kind: input.kind ?? "source",
+    title: input.title.trim(),
+    url: input.url?.trim() ?? "",
+    publisher: input.publisher ?? "",
+    publishedAt: input.publishedAt ?? "",
+    checkedAt: input.checkedAt ?? (input.url ? t : null),
+    sourceType: input.sourceType ?? "article",
+    verification: input.verification ?? "unverified",
+    summary: input.summary ?? "",
+    myNotes: input.myNotes ?? "",
+    createdAt: t,
+    updatedAt: t,
+  };
+  await db.execute(
+    `INSERT INTO research_items (id, project_id, kind, title, url, publisher, published_at, checked_at, source_type, verification, summary, my_notes, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [item.id, item.projectId, item.kind, item.title, item.url, item.publisher, item.publishedAt, item.checkedAt, item.sourceType, item.verification, item.summary, item.myNotes, t, t],
+  );
+  return item;
+}
+
+export async function deleteResearch(db: Db, id: string): Promise<void> {
+  await db.execute("DELETE FROM research_items WHERE id = ?", [id]);
+}
+
+// ---------------------------------------------------------------- thumbnails
+
+const toThumb = (r: Row): ThumbnailRecord => ({
+  id: str(r.id),
+  projectId: strOrNull(r.project_id),
+  name: str(r.name),
+  doc: str(r.doc),
+  preview: str(r.preview),
+  createdAt: str(r.created_at),
+  updatedAt: str(r.updated_at),
+});
+
+export async function listThumbnails(db: Db, projectId?: string): Promise<ThumbnailRecord[]> {
+  const rows = projectId
+    ? await db.select<Row>("SELECT id, project_id, name, '' AS doc, preview, created_at, updated_at FROM thumbnails WHERE project_id = ? ORDER BY updated_at DESC", [projectId])
+    : await db.select<Row>("SELECT id, project_id, name, '' AS doc, preview, created_at, updated_at FROM thumbnails ORDER BY updated_at DESC");
+  return rows.map(toThumb);
+}
+
+export async function getThumbnail(db: Db, id: string): Promise<ThumbnailRecord | null> {
+  const rows = await db.select<Row>("SELECT * FROM thumbnails WHERE id = ?", [id]);
+  return rows[0] ? toThumb(rows[0]) : null;
+}
+
+export async function saveThumbnail(db: Db, rec: { id?: string; projectId: string | null; name: string; doc: string; preview: string }): Promise<ThumbnailRecord> {
+  const t = nowIso();
+  if (rec.id) {
+    const existing = await getThumbnail(db, rec.id);
+    if (existing) {
+      await db.execute("UPDATE thumbnails SET project_id = ?, name = ?, doc = ?, preview = ?, updated_at = ? WHERE id = ?", [rec.projectId, rec.name, rec.doc, rec.preview, t, rec.id]);
+      return { ...existing, ...rec, id: rec.id, updatedAt: t };
+    }
+  }
+  const id = rec.id ?? newId();
+  await db.execute("INSERT INTO thumbnails (id, project_id, name, doc, preview, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)", [id, rec.projectId, rec.name, rec.doc, rec.preview, t, t]);
+  return { id, projectId: rec.projectId, name: rec.name, doc: rec.doc, preview: rec.preview, createdAt: t, updatedAt: t };
+}
+
+export async function deleteThumbnail(db: Db, id: string): Promise<void> {
+  await db.execute("DELETE FROM thumbnails WHERE id = ?", [id]);
+}
+
+// ---------------------------------------------------------------- titles & packages
+
+const toTitle = (r: Row): TitleCandidate => ({
+  id: str(r.id),
+  projectId: str(r.project_id),
+  text: str(r.text),
+  style: str(r.style),
+  favorite: num(r.favorite) === 1,
+  thumbnailId: strOrNull(r.thumbnail_id),
+  createdAt: str(r.created_at),
+});
+
+export async function listTitles(db: Db, projectId: string): Promise<TitleCandidate[]> {
+  return (await db.select<Row>("SELECT * FROM title_candidates WHERE project_id = ? ORDER BY favorite DESC, created_at", [projectId])).map(toTitle);
+}
+
+export async function addTitle(db: Db, projectId: string, text: string, style: string): Promise<TitleCandidate> {
+  const c: TitleCandidate = { id: newId(), projectId, text: text.trim(), style, favorite: false, thumbnailId: null, createdAt: nowIso() };
+  await db.execute("INSERT INTO title_candidates (id, project_id, text, style, favorite, thumbnail_id, created_at) VALUES (?, ?, ?, ?, 0, NULL, ?)", [c.id, projectId, c.text, style, c.createdAt]);
+  return c;
+}
+
+export async function updateTitle(db: Db, id: string, patch: Partial<Pick<TitleCandidate, "text" | "favorite" | "thumbnailId">>): Promise<void> {
+  const rows = await db.select<Row>("SELECT * FROM title_candidates WHERE id = ?", [id]);
+  if (!rows[0]) return;
+  const n = { ...toTitle(rows[0]), ...patch };
+  await db.execute("UPDATE title_candidates SET text = ?, favorite = ?, thumbnail_id = ? WHERE id = ?", [n.text, n.favorite ? 1 : 0, n.thumbnailId, id]);
+}
+
+export async function deleteTitle(db: Db, id: string): Promise<void> {
+  await db.execute("DELETE FROM title_candidates WHERE id = ?", [id]);
+}
+
+const toPackage = (r: Row): UploadPackage => ({
+  id: str(r.id),
+  projectId: str(r.project_id),
+  label: str(r.label),
+  content: parseJson<PackageContent>(r.content, {} as PackageContent),
+  createdAt: str(r.created_at),
+  updatedAt: str(r.updated_at),
+});
+
+export async function listPackages(db: Db, projectId: string): Promise<UploadPackage[]> {
+  return (await db.select<Row>("SELECT * FROM packages WHERE project_id = ? ORDER BY created_at", [projectId])).map(toPackage);
+}
+
+export async function savePackage(db: Db, pkg: { id?: string; projectId: string; label: string; content: PackageContent }): Promise<UploadPackage> {
+  const t = nowIso();
+  if (pkg.id) {
+    const res = await db.execute("UPDATE packages SET label = ?, content = ?, updated_at = ? WHERE id = ?", [pkg.label, JSON.stringify(pkg.content), t, pkg.id]);
+    if (res.rowsAffected > 0) {
+      const rows = await db.select<Row>("SELECT * FROM packages WHERE id = ?", [pkg.id]);
+      if (rows[0]) return toPackage(rows[0]);
+    }
+  }
+  const id = pkg.id ?? newId();
+  await db.execute("INSERT INTO packages (id, project_id, label, content, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)", [id, pkg.projectId, pkg.label, JSON.stringify(pkg.content), t, t]);
+  return { id, projectId: pkg.projectId, label: pkg.label, content: pkg.content, createdAt: t, updatedAt: t };
+}
+
+export async function deletePackage(db: Db, id: string): Promise<void> {
+  await db.execute("DELETE FROM packages WHERE id = ?", [id]);
+}
