@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 256 256">
+  <defs>
+    <linearGradient id="case" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#6c83a3"/><stop offset="1" stop-color="#2b3a52"/>
+    </linearGradient>
+    <linearGradient id="glass" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#16324a"/><stop offset="1" stop-color="#07111c"/>
+    </linearGradient>
+  </defs>
+  <rect x="20" y="22" width="216" height="172" rx="18" fill="url(#case)" stroke="#0a0f18" stroke-width="6"/>
+  <rect x="26" y="28" width="204" height="10" rx="5" fill="#9fb3cc" opacity=".55"/>
+  <rect x="40" y="44" width="176" height="128" rx="10" fill="url(#glass)" stroke="#0a0f18" stroke-width="5"/>
+  <polygon points="110,78 110,138 158,108" fill="#7dd87f"/>
+  <rect x="58" y="146" width="40" height="8" fill="#7dd87f"/>
+  <rect x="96" y="200" width="64" height="16" fill="#2b3a52" stroke="#0a0f18" stroke-width="5"/>
+  <rect x="60" y="214" width="136" height="20" rx="6" fill="url(#case)" stroke="#0a0f18" stroke-width="5"/>
+  <circle cx="204" cy="184" r="5" fill="#7dd87f"/>
+</svg>

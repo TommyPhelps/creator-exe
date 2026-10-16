@@ -1,0 +1,149 @@
+name: build
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  web:
+    name: web - typecheck, tests, bundle
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        shell: bash
+        run: |
+          set -o pipefail
+          if [ -f package-lock.json ]; then npm ci --no-audit --no-fund 2>&1 | tee install.log; else npm install --no-audit --no-fund 2>&1 | tee install.log; fi \
+            || { scripts/ci-annotate.sh error "npm install failed" install.log; exit 1; }
+      - name: Strict TypeScript
+        shell: bash
+        run: |
+          set -o pipefail
+          npx tsc --noEmit -p tsconfig.json --pretty false 2>&1 | tee tsc.log \
+            || { scripts/ci-annotate.sh error "tsc failed" tsc.log; exit 1; }
+          scripts/ci-annotate.sh notice "tsc passed" tsc.log
+      - name: Unit tests
+        shell: bash
+        run: |
+          set -o pipefail
+          npm test 2>&1 | tee test.log || { scripts/ci-annotate.sh error "tests failed" test.log; exit 1; }
+          tail -n 12 test.log > test-summary.log
+          scripts/ci-annotate.sh notice "tests passed" test-summary.log
+      - name: Production bundle
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run build 2>&1 | tee vite.log || { scripts/ci-annotate.sh error "vite build failed" vite.log; exit 1; }
+      - name: Commit generated npm lockfile
+        if: github.event_name == 'push'
+        shell: bash
+        run: |
+          if [ -z "$(git ls-files package-lock.json)" ] && [ -f package-lock.json ]; then
+            git config user.name "creator-exe-ci"
+            git config user.email "ci@users.noreply.github.com"
+            git add package-lock.json
+            git commit -m "chore: add generated package-lock.json [skip ci]"
+            git push origin HEAD:${GITHUB_REF_NAME} || echo "lockfile push skipped"
+          fi
+
+  windows:
+    name: windows - rust tests and installers
+    needs: web
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - name: Install dependencies
+        shell: bash
+        run: |
+          if [ -f package-lock.json ]; then npm ci --no-audit --no-fund; else npm install --no-audit --no-fund; fi
+      - name: Build frontend
+        shell: bash
+        run: npm run build
+      - name: Rust tests
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test --manifest-path src-tauri/Cargo.toml --lib 2>&1 | tee rust-test.log \
+            || { scripts/ci-annotate.sh error "cargo test failed" rust-test.log; exit 1; }
+          grep -E "^test result|^test " rust-test.log > rust-summary.log || true
+          scripts/ci-annotate.sh notice "cargo test passed" rust-summary.log
+      - name: Build installers
+        shell: bash
+        run: |
+          set -o pipefail
+          npx tauri build --ci 2>&1 | tee tauri-build.log \
+            || { scripts/ci-annotate.sh error "tauri build failed" tauri-build.log; exit 1; }
+      - name: Collect artifacts
+        id: collect
+        shell: bash
+        run: |
+          set -e
+          version=$(node -p "require('./package.json').version")
+          mkdir -p out
+          cp src-tauri/target/release/bundle/nsis/*.exe out/
+          cp src-tauri/target/release/bundle/msi/*.msi out/ || true
+          cp src-tauri/target/release/creator-exe.exe "out/CREATOR.EXE_${version}_x64_portable.exe"
+          (cd out && sha256sum * > SHA256SUMS.txt)
+          { echo "version=${version} commit=${GITHUB_SHA}"; ls -l out; cat out/SHA256SUMS.txt; } > artifacts.log
+          scripts/ci-annotate.sh notice "artifacts" artifacts.log
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: creator-exe-windows-${{ github.sha }}
+          path: out/*
+      - name: Publish release
+        if: github.event_name == 'push'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+        run: |
+          version="${{ steps.collect.outputs.version }}"
+          short="${GITHUB_SHA::7}"
+          notes="docs/release-notes/v${version}.md"
+          [ -f "$notes" ] || notes=/dev/null
+          if printf '%s' "$COMMIT_MESSAGE" | grep -q '\[release\]'; then
+            tag="v${version}"
+            title="CREATOR.EXE ${version}"
+            flags=""
+          else
+            branch=$(printf '%s' "$GITHUB_REF_NAME" | tr -c 'A-Za-z0-9._-' '-')
+            tag="dev-${branch}"
+            title="CREATOR.EXE ${version} dev build ${GITHUB_RUN_NUMBER} (${short})"
+            flags="--prerelease"
+            gh release delete "$tag" --cleanup-tag -y 2>/dev/null || true
+          fi
+          gh release create "$tag" out/* --target "$GITHUB_SHA" $flags --title "$title" --notes-file "$notes"
+          echo "released ${tag} from ${GITHUB_SHA}" > release.log
+          scripts/ci-annotate.sh notice "release" release.log
+      - name: Commit generated Cargo.lock
+        if: github.event_name == 'push'
+        shell: bash
+        run: |
+          if [ -z "$(git ls-files src-tauri/Cargo.lock)" ] && [ -f src-tauri/Cargo.lock ]; then
+            git config user.name "creator-exe-ci"
+            git config user.email "ci@users.noreply.github.com"
+            git add src-tauri/Cargo.lock
+            git commit -m "chore: add generated Cargo.lock [skip ci]"
+            git pull --rebase origin ${GITHUB_REF_NAME} || true
+            git push origin HEAD:${GITHUB_REF_NAME} || echo "lockfile push skipped"
+          fi
