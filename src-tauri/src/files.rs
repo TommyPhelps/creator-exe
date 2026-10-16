@@ -34,13 +34,13 @@ pub fn sanitize_name(raw: &str) -> String {
             s.pop();
         }
     }
+    if s.is_empty() {
+        return "Untitled video".to_string();
+    }
     let upper = s.to_uppercase();
     let stem = upper.split('.').next().unwrap_or("");
-    if s.is_empty() || RESERVED.contains(&stem) {
-        s = format!("Video {}", s).trim().to_string();
-    }
-    if s.is_empty() {
-        s = "Untitled video".to_string();
+    if RESERVED.contains(&stem) {
+        s = format!("Video {}", s);
     }
     s
 }
