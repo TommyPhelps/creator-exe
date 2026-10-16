@@ -1,0 +1,494 @@
+import { useEffect, useState } from "react";
+import { useAction, useApp, useData } from "../app/context.tsx";
+import {
+  addTask,
+  deleteResearch,
+  deleteTask,
+  getProject,
+  listPackages,
+  listProjectEvents,
+  listResearch,
+  listTasks,
+  listThumbnails,
+  listTitles,
+  logProjectEvent,
+  renameTask,
+  saveResearch,
+  setTaskDone,
+  touchProject,
+  updateProject,
+  type ProjectPatch,
+} from "../db/repos.ts";
+import { STAGES, type Complexity, type Project, type ProjectDetails, type ResearchItem, type TaskList } from "../domain/types.ts";
+import { rescueOptions, stageLabel, suggestedNextAction } from "../domain/projects.ts";
+import { subjectLabel } from "../domain/ideas/subjects.ts";
+import { formatDate, relativeTime } from "../lib/util.ts";
+import { Button, Chip, Dialog, Empty, Field, Note, PageHead, Segmented, Select, Tabs, TextArea, TextInput, Win } from "../ui/kit.tsx";
+import { ResearchEditor, SOURCE_TYPES, VERIFICATION } from "./Research.tsx";
+
+type Tab = "plan" | "checklists" | "research" | "files" | "history";
+
+const SECTIONS: { key: keyof ProjectDetails; label: string; hint: string; rows?: number }[] = [
+  { key: "research", label: "Research", hint: "What you need to find out, at what depth." },
+  { key: "recordingRequirements", label: "Recording requirements", hint: "Screen, voice, camera, real-world footage." },
+  { key: "equipment", label: "Equipment", hint: "Hardware, software, props." },
+  { key: "locations", label: "Locations (if any)", hint: "Where you need to be, and permissions needed." },
+  { key: "questions", label: "Important questions", hint: "What the video should answer or investigate." },
+  { key: "thingsToCapture", label: "Things to capture", hint: "Shots, moments, screens you don't want to forget." },
+  { key: "references", label: "Reference materials", hint: "Videos, articles, examples you want to look at." },
+  { key: "structure", label: "Optional structure", hint: "A loose outline or talking points. Improvise freely; this is not a script.", rows: 5 },
+  { key: "assets", label: "Project assets & credits", hint: "Music, images, clips you'll use and where they came from." },
+  { key: "thumbnailConcepts", label: "Thumbnail concepts", hint: "Ideas for the thumbnail (design them in Thumbnail Lab)." },
+  { key: "uploadInfo", label: "Upload information", hint: "Anything to remember when publishing." },
+  { key: "notes", label: "Notes", hint: "Anything else.", rows: 5 },
+];
+
+const LISTS: { id: TaskList; label: string; hint: string }[] = [
+  { id: "prep", label: "Preparation", hint: "What to get ready before recording." },
+  { id: "recording", label: "Recording checklist", hint: "Shots and takes to get." },
+  { id: "upload", label: "Upload checklist", hint: "Anything specific to this upload (the standard list is in Packaging Lab)." },
+];
+
+function Checklists({ projectId }: { projectId: string }) {
+  const { db } = useApp();
+  const act = useAction();
+  const { data } = useData(() => listTasks(db, projectId), [projectId]);
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  return (
+    <div className="grid cols-3">
+      {LISTS.map((l) => {
+        const items = (data ?? []).filter((t) => t.list === l.id);
+        const add = () => {
+          const v = (drafts[l.id] ?? "").trim();
+          if (!v) return;
+          setDrafts({ ...drafts, [l.id]: "" });
+          void act(() => addTask(db, projectId, l.id, v));
+        };
+        return (
+          <Win key={l.id} title={l.label.toUpperCase()} icon="check" meta={`${items.filter((t) => t.done).length}/${items.length}`}>
+            <p className="dim small">{l.hint}</p>
+            <div className="stack tight">
+              {items.map((t) => (
+                <div key={t.id} className="row nowrap">
+                  <label className="check">
+                    <input type="checkbox" checked={t.done} onChange={(e) => void act(() => setTaskDone(db, t.id, e.target.checked))} aria-label={t.label} />
+                  </label>
+                  <TextInput className={t.done ? "dim" : ""} value={t.label} onCommit={(v) => void act(() => (v.trim() ? renameTask(db, t.id, v.trim()) : deleteTask(db, t.id)))} />
+                  <Button size="small" icon="x" title="Remove" onClick={() => void act(() => deleteTask(db, t.id))} />
+                </div>
+              ))}
+            </div>
+            <div className="row nowrap">
+              <input
+                className="input"
+                placeholder="Add item and press Enter"
+                value={drafts[l.id] ?? ""}
+                onChange={(e) => setDrafts({ ...drafts, [l.id]: e.target.value })}
+                onKeyDown={(e) => e.key === "Enter" && add()}
+                aria-label={`Add to ${l.label}`}
+              />
+              <Button icon="plus" onClick={add} title="Add" />
+            </div>
+          </Win>
+        );
+      })}
+    </div>
+  );
+}
+
+function ProjectResearch({ projectId }: { projectId: string }) {
+  const { db, platform, confirm } = useApp();
+  const act = useAction();
+  const { data } = useData(() => listResearch(db, projectId), [projectId]);
+  const [editing, setEditing] = useState<ResearchItem | "new" | null>(null);
+  const items = data ?? [];
+  return (
+    <div className="stack">
+      <div className="row">
+        <Button variant="primary" icon="plus" onClick={() => setEditing("new")}>
+          Add source or note
+        </Button>
+        <span className="dim small">Paste a link, then write what it says in your own words. Mark whether you verified it.</span>
+      </div>
+      {items.length ? (
+        <table className="table">
+          <thead>
+            <tr>
+              <th>Item</th>
+              <th>Type</th>
+              <th>Status</th>
+              <th>Checked</th>
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((r) => (
+              <tr key={r.id} onDoubleClick={() => setEditing(r)}>
+                <td>
+                  <div>{r.title}</div>
+                  <div className="dim small ellipsis" style={{ maxWidth: 520 }}>
+                    {r.kind === "source" ? r.url || "no link" : r.kind}
+                    {r.publisher ? ` :: ${r.publisher}` : ""}
+                    {r.publishedAt ? ` :: ${r.publishedAt}` : ""}
+                  </div>
+                </td>
+                <td>{SOURCE_TYPES.find((s) => s.id === r.sourceType)?.label ?? r.sourceType}</td>
+                <td>
+                  <Chip kind={r.verification === "verified" ? "ok" : r.verification === "disputed" ? "err" : r.verification === "speculation" ? "warn" : undefined}>
+                    {VERIFICATION.find((v) => v.id === r.verification)?.label}
+                  </Chip>
+                </td>
+                <td className="dim small">{r.checkedAt ? formatDate(r.checkedAt) : "-"}</td>
+                <td>
+                  <span className="row nowrap">
+                    {r.url ? <Button size="small" icon="link" title="Open original source" onClick={() => void platform.openUrl(r.url)} /> : null}
+                    <Button size="small" onClick={() => setEditing(r)}>
+                      Edit
+                    </Button>
+                    <Button
+                      size="small"
+                      icon="trash"
+                      title="Delete"
+                      onClick={async () => {
+                        if (await confirm({ title: "Delete research item", message: `Delete "${r.title}"?`, confirm: "Delete", danger: true })) void act(() => deleteResearch(db, r.id));
+                      }}
+                    />
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : (
+        <Empty icon="research" title="No research saved for this project">
+          Add sources as you find them. They become the Sources section of your description.
+        </Empty>
+      )}
+      {editing ? (
+        <ResearchEditor
+          item={editing === "new" ? null : editing}
+          defaultProjectId={projectId}
+          onClose={() => setEditing(null)}
+          onSave={async (input) => {
+            await act(() => saveResearch(db, input), { title: "RESEARCH SAVED" });
+            setEditing(null);
+          }}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function Files({ project }: { project: Project }) {
+  const { db, platform, settings, confirm, toast, go } = useApp();
+  const act = useAction();
+  const [exists, setExists] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (!project.folderPath) return setExists(null);
+    platform.files.exists(project.folderPath).then(setExists, () => setExists(false));
+  }, [project.folderPath, platform]);
+
+  const create = async () => {
+    if (!settings.projectRoot) {
+      toast("NO PROJECT FOLDER SET", "Choose where project folders go in Settings first.", "err");
+      go({ section: "settings" });
+      return;
+    }
+    const ok = await confirm({
+      title: "Create project folder",
+      message: `CREATOR.EXE will create this folder (existing files are never changed or deleted):\n\n${settings.projectRoot}\\${project.title}\\\n${settings.folderTemplate.map((f) => `    ${f}\\`).join("\n")}`,
+      confirm: "Create folders",
+    });
+    if (!ok) return;
+    const path = await act(() => platform.files.createProjectFolders(settings.projectRoot, project.title, settings.folderTemplate), { title: "FOLDERS CREATED" });
+    if (path) {
+      await updateProject(db, project.id, { folderPath: path });
+      await logProjectEvent(db, project.id, "folder", path);
+    }
+  };
+
+  return (
+    <div className="grid cols-2">
+      <Win title="PROJECT FOLDER" icon="folder">
+        {project.folderPath ? (
+          <>
+            <div className="inset mono small selectable">{project.folderPath}</div>
+            {exists === false ? <Note kind="warn">This folder no longer exists at that path. It may have been moved or renamed.</Note> : null}
+            <div className="row">
+              <Button icon="folder" disabled={exists === false} onClick={() => void act(() => platform.files.reveal(project.folderPath as string))}>
+                Open in File Explorer
+              </Button>
+              <Button onClick={() => void create()}>Re-create missing subfolders</Button>
+              <Button variant="flat" onClick={() => void act(() => updateProject(db, project.id, { folderPath: null }))}>
+                Forget this path
+              </Button>
+            </div>
+          </>
+        ) : (
+          <>
+            <p>Create a tidy folder for recordings, audio, thumbnails and exports. You'll be shown exactly what will be created first.</p>
+            <div className="row">
+              <Button variant="primary" icon="folder" onClick={() => void create()}>
+                Create project folder
+              </Button>
+              <Button
+                onClick={async () => {
+                  const p = await platform.dialogs.pickFolder("Use an existing folder for this project");
+                  if (p) void act(() => updateProject(db, project.id, { folderPath: p }), { title: "FOLDER LINKED" });
+                }}
+              >
+                Use an existing folder
+              </Button>
+            </div>
+            <p className="dim small">Project folders go in: {settings.projectRoot || "(not set; choose one in Settings)"}</p>
+          </>
+        )}
+      </Win>
+      <Win title="EDITING APP" icon="play">
+        <p>Open your own video editor. CREATOR.EXE only launches it; every editing decision stays yours.</p>
+        {settings.editorPath ? (
+          <>
+            <div className="inset mono small selectable">{settings.editorPath}</div>
+            <Button icon="play" onClick={() => void act(() => platform.files.launch(settings.editorPath, project.folderPath ?? undefined))}>
+              Open editor{project.folderPath ? " with project folder" : ""}
+            </Button>
+          </>
+        ) : (
+          <Button onClick={() => go({ section: "settings" })}>Choose your editor in Settings</Button>
+        )}
+      </Win>
+      <Win title="LINKS" icon="link">
+        <Links project={project} />
+      </Win>
+    </div>
+  );
+}
+
+function Links({ project }: { project: Project }) {
+  const { db, platform } = useApp();
+  const act = useAction();
+  const [label, setLabel] = useState("");
+  const [url, setUrl] = useState("");
+  const links = project.details.links;
+  const add = () => {
+    if (!url.trim()) return;
+    void act(() => updateProject(db, project.id, { details: { links: [...links, { label: label.trim() || url.trim(), url: url.trim() }] } }));
+    setLabel("");
+    setUrl("");
+  };
+  return (
+    <div className="stack">
+      {links.map((l, i) => (
+        <div key={`${l.url}${i}`} className="row nowrap">
+          <Button variant="flat" icon="link" onClick={() => void platform.openUrl(l.url)}>
+            {l.label}
+          </Button>
+          <span className="dim small ellipsis grow">{l.url}</span>
+          <Button size="small" icon="x" title="Remove link" onClick={() => void act(() => updateProject(db, project.id, { details: { links: links.filter((_, j) => j !== i) } }))} />
+        </div>
+      ))}
+      <div className="row nowrap">
+        <input className="input" style={{ width: 160 }} placeholder="Label" value={label} onChange={(e) => setLabel(e.target.value)} aria-label="Link label" />
+        <input className="input grow" placeholder="https://" value={url} onChange={(e) => setUrl(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()} aria-label="Link URL" />
+        <Button icon="plus" onClick={add} title="Add link" />
+      </div>
+    </div>
+  );
+}
+
+function History({ projectId }: { projectId: string }) {
+  const { db } = useApp();
+  const { data } = useData(() => listProjectEvents(db, projectId), [projectId]);
+  return (
+    <Win title="PROJECT HISTORY" icon="refresh">
+      <table className="table">
+        <tbody>
+          {(data ?? []).map((e) => (
+            <tr key={e.id}>
+              <td className="dim small" style={{ width: 200 }}>
+                {new Date(e.createdAt).toLocaleString()}
+              </td>
+              <td>{e.kind}</td>
+              <td className="selectable">{e.detail}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </Win>
+  );
+}
+
+function Rescue({ project, onClose }: { project: Project; onClose: () => void }) {
+  const { db, go } = useApp();
+  const act = useAction();
+  const apply = async (id: string) => {
+    if (id === "simplify") await act(() => updateProject(db, project.id, { complexity: "quick", nextAction: "Decide the single moment the short version is about." }), { title: "SCALED DOWN" });
+    if (id === "first-action") await act(() => updateProject(db, project.id, { nextAction: "Record five minutes of anything related. It doesn't need to be usable." }), { title: "NEXT ACTION SET" });
+    if (id === "less-research") await act(() => updateProject(db, project.id, { details: { research: `${project.details.research}\n(Research trimmed: use what's already saved.)`.trim() } }), { title: "RESEARCH TRIMMED" });
+    if (id === "park") await act(() => updateProject(db, project.id, { archived: true }), { title: "PARKED", body: "It's in the archive whenever you want it back." });
+    if (id === "switch") go({ section: "tonight" });
+    onClose();
+  };
+  return (
+    <Dialog title="Creative block rescue" icon="rescue" onClose={onClose} actions={<Button onClick={onClose}>Close</Button>}>
+      <p>Being stuck is normal. Pick one, or none.</p>
+      <div className="stack tight">
+        {rescueOptions(project).map((o) => (
+          <button key={o.id} className="btn" style={{ justifyContent: "flex-start", textAlign: "left", height: "auto", padding: 10 }} onClick={() => void apply(o.id)}>
+            <span className="stack tight">
+              <b>{o.label}</b>
+              <span className="dim small">{o.detail}</span>
+            </span>
+          </button>
+        ))}
+      </div>
+    </Dialog>
+  );
+}
+
+export function Workshop({ projectId, tab: initialTab }: { projectId: string; tab?: string }) {
+  const { db, go } = useApp();
+  const act = useAction();
+  const [tab, setTab] = useState<Tab>((initialTab as Tab) || "plan");
+  const [rescue, setRescue] = useState(false);
+  const { data, error } = useData(async () => {
+    const [project, tasks, research, thumbs, titles, packages] = await Promise.all([
+      getProject(db, projectId),
+      listTasks(db, projectId),
+      listResearch(db, projectId),
+      listThumbnails(db, projectId),
+      listTitles(db, projectId),
+      listPackages(db, projectId),
+    ]);
+    return { project, tasks, research, thumbs, titles, packages };
+  }, [projectId]);
+
+  useEffect(() => {
+    void touchProject(db, projectId);
+  }, [db, projectId]);
+
+  if (error) return <Note kind="err">{error}</Note>;
+  if (!data) return <div className="dim">Loading...</div>;
+  const p = data.project;
+  if (!p) {
+    return (
+      <Empty icon="projects" title="Project not found">
+        <Button onClick={() => go({ section: "projects" })}>Back to projects</Button>
+      </Empty>
+    );
+  }
+  const save = (patch: ProjectPatch) => void act(() => updateProject(db, p.id, patch));
+  const next = suggestedNextAction(p, data.tasks);
+
+  return (
+    <div className="page">
+      <PageHead
+        sys={`VIDEO WORKSHOP :: ${stageLabel(p.stage).toUpperCase()}${p.archived ? " :: ARCHIVED" : ""}`}
+        title={p.title}
+        actions={
+          <>
+            <Button onClick={() => go({ section: "projects" })}>All projects</Button>
+            <Button icon="rescue" onClick={() => setRescue(true)}>
+              Stuck?
+            </Button>
+            <Button icon="thumbnail" onClick={() => go({ section: "thumbnails", projectId: p.id })}>
+              Thumbnail ({data.thumbs.length})
+            </Button>
+            <Button icon="packaging" onClick={() => go({ section: "packaging", projectId: p.id })}>
+              Titles & package ({data.titles.length}/{data.packages.length})
+            </Button>
+          </>
+        }
+      />
+      <div className="lcd" style={{ padding: "10px 16px" }}>
+        <div className="lcd-label">NEXT ACTION</div>
+        <div className="row nowrap" style={{ marginTop: 4 }}>
+          <div className="lcd-line grow selectable">&gt; {next}</div>
+        </div>
+      </div>
+      <div className="row nowrap">
+        <span className="label" style={{ width: 100 }}>
+          Next action
+        </span>
+        <TextInput className="grow" value={p.nextAction} placeholder={next} onCommit={(v) => save({ nextAction: v })} />
+      </div>
+      <div className="row">
+        <span className="label" style={{ width: 100 }}>
+          Stage
+        </span>
+        <Select value={p.stage} options={STAGES} onChange={(v) => save({ stage: v, archived: v === "archived" })} className="" />
+        <span className="label">Size</span>
+        <Segmented<Complexity>
+          value={p.complexity}
+          options={[
+            { id: "quick", label: "Quick" },
+            { id: "standard", label: "Standard" },
+            { id: "ambitious", label: "Ambitious" },
+          ]}
+          onChange={(v) => v && save({ complexity: v })}
+          label="Project size"
+        />
+        <span className="label">Priority</span>
+        <Button size="small" icon="down" title="Lower priority" onClick={() => save({ priority: Math.max(0, p.priority - 1) })} />
+        <span className="mono">{p.priority}</span>
+        <Button size="small" icon="up" title="Raise priority" onClick={() => save({ priority: p.priority + 1 })} />
+        <span className="label">Custom status</span>
+        <TextInput className="" value={p.details.customStatus} placeholder="e.g. waiting on parts" onCommit={(v) => save({ details: { customStatus: v } })} />
+        {p.stage === "editing" ? <span className="dim small">Editing is just a status here. The edit is all yours.</span> : null}
+      </div>
+
+      <Tabs<Tab>
+        value={tab}
+        tabs={[
+          { id: "plan", label: "Plan" },
+          { id: "checklists", label: "Checklists", badge: data.tasks.filter((t) => !t.done).length },
+          { id: "research", label: "Research", badge: data.research.length },
+          { id: "files", label: "Folder, editor & links" },
+          { id: "history", label: "History" },
+        ]}
+        onChange={setTab}
+      />
+      <div className="tabpanel">
+        {tab === "plan" ? (
+          <div className="stack">
+            <div className="grid cols-2">
+              <Field label="Project title">{(id) => <TextInput id={id} value={p.title} onCommit={(v) => v.trim() && save({ title: v.trim() })} />}</Field>
+              <Field label="Subjects" hint="Used for tags and idea suggestions.">
+                {() => (
+                  <div className="row">
+                    {p.subjects.length ? p.subjects.map((s) => <Chip key={s} onRemove={() => save({ subjects: p.subjects.filter((x) => x !== s) })}>{subjectLabel(s)}</Chip>) : <span className="dim small">None yet</span>}
+                  </div>
+                )}
+              </Field>
+              <Field label="Core premise">{(id) => <TextArea id={id} value={p.premise} rows={3} onCommit={(v) => save({ premise: v })} />}</Field>
+              <Field label="Why I want to make it">{(id) => <TextArea id={id} value={p.why} rows={3} onCommit={(v) => save({ why: v })} />}</Field>
+            </div>
+            {p.details.origin ? (
+              <details>
+                <summary className="dim">Where this idea came from</summary>
+                <pre className="inset small selectable" style={{ whiteSpace: "pre-wrap", fontFamily: "var(--font-ui)" }}>
+                  {p.details.origin}
+                </pre>
+              </details>
+            ) : null}
+            <div className="grid cols-2">
+              {SECTIONS.map((s) => (
+                <Field key={s.key} label={s.label} hint={s.hint}>
+                  {(id) => <TextArea id={id} rows={s.rows ?? 3} value={String(p.details[s.key] ?? "")} onCommit={(v) => save({ details: { [s.key]: v } as Partial<ProjectDetails> })} />}
+                </Field>
+              ))}
+            </div>
+            <p className="dim small">
+              Everything saves automatically. Created {formatDate(p.createdAt)}, last changed {relativeTime(p.updatedAt)}.
+            </p>
+          </div>
+        ) : null}
+        {tab === "checklists" ? <Checklists projectId={p.id} /> : null}
+        {tab === "research" ? <ProjectResearch projectId={p.id} /> : null}
+        {tab === "files" ? <Files project={p} /> : null}
+        {tab === "history" ? <History projectId={p.id} /> : null}
+      </div>
+      {rescue ? <Rescue project={p} onClose={() => setRescue(false)} /> : null}
+    </div>
+  );
+}

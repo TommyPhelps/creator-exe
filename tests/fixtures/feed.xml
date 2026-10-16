@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns:yt="http://www.youtube.com/xml/schemas/2015" xmlns:media="http://search.yahoo.com/mrss/" xmlns="http://www.w3.org/2005/Atom">
+ <link rel="self" href="http://www.youtube.com/feeds/videos.xml?channel_id=UCGnpORs6LGRRb1b7y39wumw"/>
+ <id>yt:channel:GnpORs6LGRRb1b7y39wumw</id>
+ <yt:channelId>UCGnpORs6LGRRb1b7y39wumw</yt:channelId>
+ <title>Tamster</title>
+ <author><name>Tamster</name></author>
+ <published>2020-01-01T00:00:00+00:00</published>
+ <entry>
+  <id>yt:video:AAAAAAAAAA1</id>
+  <yt:videoId>AAAAAAAAAA1</yt:videoId>
+  <title>Project Zomboid but I&apos;m a Pacifist</title>
+  <published>2021-06-01T12:00:00+00:00</published>
+  <media:group>
+   <media:title>Project Zomboid but I&apos;m a Pacifist</media:title>
+   <media:thumbnail url="https://i2.ytimg.com/vi/AAAAAAAAAA1/hqdefault.jpg" width="480" height="360"/>
+   <media:description>No shoving &amp; no hitting.</media:description>
+   <media:community>
+    <media:starRating count="12" average="5.00" min="1" max="5"/>
+    <media:statistics views="337"/>
+   </media:community>
+  </media:group>
+ </entry>
+ <entry>
+  <id>yt:video:BBBBBBBBBB2</id>
+  <yt:videoId>BBBBBBBBBB2</yt:videoId>
+  <title>Night Factory is TERRIFYING | Escape</title>
+  <published>2021-03-01T12:00:00+00:00</published>
+  <media:group>
+   <media:thumbnail url="https://i2.ytimg.com/vi/BBBBBBBBBB2/hqdefault.jpg" width="480" height="360"/>
+   <media:description><![CDATA[Horror <b>game</b>]]></media:description>
+   <media:community><media:statistics views="18"/></media:community>
+  </media:group>
+ </entry>
+</feed>

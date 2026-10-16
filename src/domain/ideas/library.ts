@@ -151,7 +151,7 @@ export const IDEA_LIBRARY: IdeaSeed[] = [
     subjects: ["linux", "retro-computing", "tech-challenges"],
     series: true,
     originality: "well-trodden",
-    variants: { slot: "distro", values: ["Puppy Linux", "antiX", "Debian with no desktop", "Tiny Core Linux", "Haiku (not Linux, but close enough to compare)"] },
+    variants: { slot: "distro", values: ["Puppy Linux", "antiX", "Debian with no desktop", "Tiny Core Linux", "Haiku OS"] },
     tonight: {
       needs: ["An old computer", "A USB stick", "The distro image downloaded"],
       firstFive: "Write the distro to the USB stick while you find the old machine's charger.",

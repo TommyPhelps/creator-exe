@@ -39,6 +39,18 @@ function same(a: unknown, b: unknown): boolean {
   return (a ?? null) === (b ?? null);
 }
 
+function sameInstant(a: string | null | undefined, b: string | null | undefined): boolean {
+  if (!a || !b) return !a && !b;
+  return Date.parse(a) === Date.parse(b);
+}
+
+/** Normalizes any parseable date to ISO 8601 UTC. */
+export function normalizeDate(s: string | null | undefined): string | null {
+  if (!s) return null;
+  const t = Date.parse(s);
+  return Number.isNaN(t) ? null : new Date(t).toISOString();
+}
+
 export function planMerge(existing: Video[], batch: ImportBatch, existingMetrics: Map<string, Record<string, number>> = new Map()): MergePlan {
   const byId = new Map(existing.map((v) => [v.id, v]));
   const seen = new Set<string>();
@@ -64,10 +76,13 @@ export function planMerge(existing: Video[], batch: ImportBatch, existingMetrics
       continue;
     }
     const changes: ChangeField[] = [];
+    // Studio exports carry date-only publish times and sometimes shortened
+    // titles, so they only fill gaps; they never replace richer data.
+    const partial = batch.source === "studio_export";
     // A source that does not provide a field never blanks it out.
-    if (v.title && v.title !== "(untitled)" && v.title !== "(unavailable video)" && !same(v.title, cur.title)) changes.push("title");
+    if (v.title && v.title !== "(untitled)" && v.title !== "(unavailable video)" && !same(v.title, cur.title) && (!partial || !cur.title)) changes.push("title");
     if (v.description !== undefined && v.description !== "" && !same(v.description, cur.description)) changes.push("description");
-    if (v.publishedAt && !same(v.publishedAt, cur.publishedAt)) changes.push("publishedAt");
+    if (v.publishedAt && !sameInstant(v.publishedAt, cur.publishedAt) && (!partial || !cur.publishedAt)) changes.push("publishedAt");
     if (v.durationSeconds !== undefined && v.durationSeconds !== null && !same(v.durationSeconds, cur.durationSeconds)) changes.push("durationSeconds");
     if (v.thumbnailUrl && !cur.thumbnailUrl) changes.push("thumbnailUrl");
     else if (v.thumbnailUrl && batch.source !== "studio_export" && !same(v.thumbnailUrl, cur.thumbnailUrl)) changes.push("thumbnailUrl");
@@ -79,7 +94,7 @@ export function planMerge(existing: Video[], batch: ImportBatch, existingMetrics
     if (changes.length || metricChanges.length) plan.updated.push({ video: v, existing: cur, changes, metricChanges });
     else plan.unchanged.push(v);
   }
-  if (batch.source !== "studio_export") {
+  if (batch.source === "public_feed" || batch.source === "public_api") {
     plan.notReturned = existing.filter((v) => !seen.has(v.id) && !v.id.startsWith("manual-"));
   }
   if (plan.duplicatesInBatch) plan.warnings.push(`${plan.duplicatesInBatch} duplicate row(s) in the import were ignored.`);
@@ -101,7 +116,7 @@ export function planStatements(plan: MergePlan, t: string = nowIso()): Statement
       {
         sql: `INSERT INTO videos (id, title, description, published_at, duration_seconds, thumbnail_url, availability, first_source, last_synced_at, created_at, updated_at)
               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        params: [v.id, v.title, v.description ?? "", v.publishedAt ?? null, v.durationSeconds ?? null, v.thumbnailUrl ?? null, v.availability ?? "unknown", plan.source, t, t, t],
+        params: [v.id, v.title, v.description ?? "", normalizeDate(v.publishedAt), v.durationSeconds ?? null, v.thumbnailUrl ?? null, v.availability ?? "unknown", plan.source, t, t, t],
       },
       ...metricStatements(v, plan.source, t),
     ]);
@@ -116,7 +131,7 @@ export function planStatements(plan: MergePlan, t: string = nowIso()): Statement
         params: [
           pick("title", v.title, e.title),
           pick("description", v.description, e.description),
-          pick("publishedAt", v.publishedAt, e.publishedAt),
+          pick("publishedAt", normalizeDate(v.publishedAt), e.publishedAt),
           pick("durationSeconds", v.durationSeconds, e.durationSeconds),
           pick("thumbnailUrl", v.thumbnailUrl, e.thumbnailUrl),
           pick("availability", v.availability, e.availability),

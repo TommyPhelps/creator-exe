@@ -407,7 +407,7 @@ export function generateIdeas(
         break;
       case "new":
         if (!touchesKnown && !s.subjects.some((x) => adjacent.has(x))) add(3, "Completely outside your previous content");
-        else if (touchesKnown) add(-4, "Overlaps subjects you have already covered");
+        else if (touchesKnown) add(-4, "Overlaps your past or favorite subjects");
         break;
       case "surprise":
         add(rng() * 3, "Surprise pick");
