@@ -145,3 +145,15 @@ export function checkTitle(title: string, topic = ""): TitleCheck {
   }
   return { length: len, notes };
 }
+
+/** Guesses the searchable subject from a working title: the first run of capitalised words or numbers after the first word. */
+export function guessTopic(title: string): string {
+  const tokens = title.trim().split(/\s+/);
+  let run: string[] = [];
+  for (let i = 1; i < tokens.length; i++) {
+    const t = tokens[i] ?? "";
+    if (/^[A-Z0-9]/.test(t) && !/^(I|I'm|A|An|The)$/.test(t)) run.push(t.replace(/[,.:!?]+$/, ""));
+    else if (run.length) break;
+  }
+  return run.join(" ");
+}

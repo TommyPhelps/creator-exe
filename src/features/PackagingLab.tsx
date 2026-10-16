@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAction, useApp, useData } from "../app/context.tsx";
 import { addTitle, deletePackage, deleteTitle, getProject, listPackages, listProjects, listResearch, listThumbnails, listTitles, savePackage, updateTitle } from "../db/repos.ts";
-import { checkTitle, suggestTitles, TITLE_STYLES, type TitleSlots, type TitleStyle } from "../domain/titles.ts";
+import { checkTitle, guessTopic, suggestTitles, TITLE_STYLES, type TitleSlots, type TitleStyle } from "../domain/titles.ts";
 import { checkChapters, DISCLOSURES, draftDescription, emptyPackage, formatSources, fullDescription, packageToText, suggestHashtags, suggestTags, UPLOAD_CHECKLIST } from "../domain/packaging.ts";
 import { subjectLabel } from "../domain/ideas/subjects.ts";
 import type { PackageContent, Project, TitleCandidate, UploadPackage } from "../domain/types.ts";
@@ -18,7 +18,7 @@ async function copy(text: string, toast: (t: string, b?: string, k?: "ok" | "err
 }
 
 function defaultSlots(p: Project): TitleSlots {
-  const topic = p.subjects[0] ? subjectLabel(p.subjects[0]) : "";
+  const topic = guessTopic(p.title) || (p.subjects[0] ? subjectLabel(p.subjects[0]) : "");
   return { topic, did: p.title.startsWith("I ") ? p.title : "", constraint: "", outcome: "" };
 }
 

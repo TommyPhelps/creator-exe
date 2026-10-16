@@ -101,3 +101,10 @@ test("package export contains only filled sections", () => {
   assert.ok(!t.includes("PINNED COMMENT"));
   assert.equal(fullDescription(p), "Desc\n\n#RetroComputing");
 });
+
+test("guesses the searchable subject from a working title", async () => {
+  const { guessTopic } = await import("../src/domain/titles.ts");
+  assert.equal(guessTopic("Using Windows 98 as my only computer for a week"), "Windows 98");
+  assert.equal(guessTopic("Following a webring until it ends"), "");
+  assert.equal(guessTopic("I played Valorant for the FIRST TIME"), "Valorant");
+});

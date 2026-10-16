@@ -104,6 +104,8 @@ export interface EditorProps {
   onSave: (doc: ThumbnailDoc) => Promise<void>;
   onClose: () => void;
   onAddReference: () => Promise<ImageLayer | null>;
+  /** True when the document has never been saved. */
+  unsaved?: boolean;
 }
 
 export function Editor(props: EditorProps) {
@@ -118,7 +120,7 @@ export function Editor(props: EditorProps) {
   const [snapOn, setSnapOn] = useState(true);
   const [safe, setSafe] = useState(true);
   const [guides, setGuides] = useState<{ x: number | null; y: number | null }>({ x: null, y: null });
-  const [dirty, setDirty] = useState(false);
+  const [dirty, setDirty] = useState(!!props.unsaved);
   const [exportDlg, setExportDlg] = useState(false);
   const [busy, setBusy] = useState(false);
   const drag = useRef<DragState | null>(null);

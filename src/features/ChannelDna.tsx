@@ -272,7 +272,7 @@ function VideoDetail({ video, feedback, onClose }: { video: Video; feedback: Vid
 
   return (
     <Win title="VIDEO DETAILS" icon="channel" actions={<Button size="small" icon="x" title="Close" onClick={onClose} />} scroll>
-      <div className="vthumb">{video.thumbnailUrl ? <img src={video.thumbnailUrl} alt="" /> : <Icon name="channel" />}</div>
+      <div className="vthumb">{video.thumbnailUrl ? <ThumbImg src={video.thumbnailUrl} /> : <Icon name="channel" />}</div>
       <h3 className="selectable">{video.title}</h3>
       <div className="row small">
         <Chip>{formatDate(video.publishedAt)}</Chip>
@@ -381,6 +381,13 @@ function VideoDetail({ video, feedback, onClose }: { video: Video; feedback: Vid
       </Button>
     </Win>
   );
+}
+
+/** Thumbnail image that degrades to a label when offline or removed from YouTube. */
+export function ThumbImg({ src }: { src: string }) {
+  const [failed, setFailed] = useState(false);
+  if (failed) return <span>thumbnail unavailable (offline?)</span>;
+  return <img src={src} alt="" loading="lazy" onError={() => setFailed(true)} />;
 }
 
 type Sort = "newest" | "oldest" | "views" | "longest" | "loved";
@@ -521,7 +528,7 @@ export function ChannelDna() {
                 {list.map((v) => (
                   <button key={v.id} className={`vcard ${selected === v.id ? "sel" : ""}`} onClick={() => setSelected(v.id)}>
                     <div className="vthumb">
-                      {v.thumbnailUrl ? <img src={v.thumbnailUrl} alt="" loading="lazy" /> : <span>no thumbnail</span>}
+                      {v.thumbnailUrl ? <ThumbImg src={v.thumbnailUrl} /> : <span>no thumbnail</span>}
                       {v.durationSeconds !== null ? <span className="dur">{formatDuration(v.durationSeconds)}</span> : null}
                     </div>
                     <div className="vtitle">{v.title}</div>
@@ -529,7 +536,7 @@ export function ChannelDna() {
                       <span>{formatDate(v.publishedAt)}</span>
                       {views.has(v.id) ? <span>{views.get(v.id)?.toLocaleString()} views</span> : null}
                       {fbMap.get(v.id)?.flags.includes("loved_making") ? <span style={{ color: "var(--led)" }}>loved making</span> : null}
-                      {v.availability !== "public" ? <span>{v.availability}</span> : null}
+                      {v.availability === "private" || v.availability === "unlisted" || v.availability === "deleted" ? <span>{v.availability}</span> : null}
                     </div>
                   </button>
                 ))}

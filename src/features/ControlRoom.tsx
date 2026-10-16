@@ -99,7 +99,15 @@ export function ControlRoom() {
   const active = useMemo(() => (d ? d.projects.filter(isUnfinished) : []), [d]);
   const current = useMemo(() => {
     if (!active.length) return null;
-    return [...active].sort((a, b) => (b.openedAt ?? b.updatedAt).localeCompare(a.openedAt ?? a.updatedAt))[0] ?? null;
+    // Most recently opened wins; ties go to the project furthest along, then priority.
+    return (
+      [...active].sort(
+        (a, b) =>
+          (b.openedAt ?? b.updatedAt).slice(0, 16).localeCompare((a.openedAt ?? a.updatedAt).slice(0, 16)) ||
+          stageIndex(b.stage) - stageIndex(a.stage) ||
+          b.priority - a.priority,
+      )[0] ?? null
+    );
   }, [active]);
   const next = current && d ? suggestedNextAction(current, d.tasks) : "";
 

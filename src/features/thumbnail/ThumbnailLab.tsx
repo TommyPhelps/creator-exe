@@ -10,6 +10,7 @@ import type { Video } from "../../domain/types.ts";
 import { Button, Dialog, Empty, Field, Note, PageHead, Select, Win } from "../../ui/kit.tsx";
 import { Icon } from "../../ui/icons.tsx";
 import { Editor } from "./Editor.tsx";
+import { ThumbImg } from "../ChannelDna.tsx";
 import { docPreview, imageSize, measureText } from "./raster.ts";
 
 interface Open {
@@ -30,7 +31,7 @@ function ReferencePicker({ onPick, onClose }: { onPick: (v: Video) => void; onCl
           {vids.map((v) => (
             <button key={v.id} className="vcard" onClick={() => onPick(v)}>
               <div className="vthumb">
-                <img src={v.thumbnailUrl ?? ""} alt="" loading="lazy" />
+                <ThumbImg src={v.thumbnailUrl ?? ""} />
               </div>
               <div className="vtitle">{v.title}</div>
             </button>
@@ -160,6 +161,7 @@ export function ThumbnailLab({ projectId, thumbnailId }: { projectId: string | n
             if (thumbnailId) go({ section: "thumbnails", projectId });
           }}
           onAddReference={addReference}
+          unsaved={!open.id}
         />
         {refResolve ? (
           <ReferencePicker

@@ -60,9 +60,16 @@ export function wrapHeadline(text: string, maxChars = 14, maxLines = 3): string 
   return lines.join("\n");
 }
 
-function text(input: ConceptInput, t: string, patch: Partial<TextLayer>): TextLayer {
-  const l: TextLayer = { ...newText(t), ...patch } as TextLayer;
-  const box = estimateTextBox(l, input.measure);
+const MAX_TEXT_W = THUMB_W - 80;
+
+/** Builds a text layer and shrinks its font until it fits inside the canvas. */
+function text(input: ConceptInput, t: string, patch: Partial<TextLayer>, maxW = MAX_TEXT_W): TextLayer {
+  let l: TextLayer = { ...newText(t), ...patch } as TextLayer;
+  let box = estimateTextBox(l, input.measure);
+  for (let i = 0; i < 6 && box.w > maxW && l.fontSize > 16; i++) {
+    l = { ...l, fontSize: Math.max(16, Math.floor(l.fontSize * (maxW / box.w) * 0.98)) };
+    box = estimateTextBox(l, input.measure);
+  }
   return { ...l, w: patch.w ?? box.w, h: box.h };
 }
 
@@ -132,7 +139,7 @@ export const CONCEPTS: ThumbnailConcept[] = [
     reasoning: "High contrast survives YouTube's small sizes and dark mode alike.",
     drawbacks: "Common style; can feel generic if the photo is weak.",
     build: (input) => {
-      const t = text(input, wrapHeadline(input.headline.toUpperCase(), 12, 3), { fontSize: 128, uppercase: true });
+      const t = text(input, wrapHeadline(input.headline.toUpperCase(), 12, 3), { fontSize: 128, uppercase: true }, 680);
       t.x = 60;
       t.y = Math.max(40, (THUMB_H - t.h) / 2);
       return doc(input.headline, "bold", [
@@ -188,7 +195,7 @@ export const CONCEPTS: ThumbnailConcept[] = [
     reasoning: "Instantly signals retro computing and early-2000s software.",
     drawbacks: "Small dialog text gets tiny on phones; keep the headline short.",
     build: (input) => {
-      const t = text(input, wrapHeadline(input.headline, 20, 2), { fontFamily: "Verdana", fontWeight: 700, fontSize: 64, color: "#000000", stroke: null, shadow: null });
+      const t = text(input, wrapHeadline(input.headline, 20, 2), { fontFamily: "Verdana", fontWeight: 700, fontSize: 64, color: "#000000", stroke: null, shadow: null }, 860);
       t.x = 230;
       t.y = 300;
       return doc(input.headline, "nostalgic", [
@@ -217,7 +224,7 @@ export const CONCEPTS: ThumbnailConcept[] = [
     reasoning: "Signals that the video does not take itself seriously.",
     drawbacks: "Easy to overdo; may clash with a more thoughtful video.",
     build: (input) => {
-      const t = text(input, wrapHeadline(input.headline, 12, 3), { fontFamily: "Comic Sans MS", fontWeight: 700, fontSize: 96, color: "#fff200", stroke: { color: "#5a00a8", width: 10 }, rotation: -8 });
+      const t = text(input, wrapHeadline(input.headline, 12, 3), { fontFamily: "Comic Sans MS", fontWeight: 700, fontSize: 96, color: "#fff200", stroke: { color: "#5a00a8", width: 10 }, rotation: -8 }, 640);
       t.x = 70;
       t.y = 90;
       return doc(input.headline, "absurd", [
@@ -242,7 +249,6 @@ export const CONCEPTS: ThumbnailConcept[] = [
     drawbacks: "Small text; the image has to do most of the work.",
     build: (input) => {
       const t = text(input, input.headline.toUpperCase(), { fontFamily: "Georgia", fontWeight: 400, fontSize: 58, letterSpacing: 10, color: "#e8d9b5", align: "middle", stroke: null, shadow: { color: "#000000", blur: 16, dx: 0, dy: 4, opacity: 0.8 } });
-      t.w = Math.min(t.w, 1100);
       t.x = (THUMB_W - t.w) / 2;
       t.y = 520;
       return doc(input.headline, "cinematic", [

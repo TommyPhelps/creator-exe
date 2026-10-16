@@ -151,7 +151,7 @@ test("merge dedupes by video ID and never overwrites the creator's annotations",
   assert.ok(metrics.some((m) => m.source === "public_feed" && m.metric === "views"));
   assert.ok(metrics.some((m) => m.source === "studio_export" && m.metric === "ctr_percent"));
 
-  const again = planMerge(await repo.listVideos(db), parseChannelFeed(fixture("feed.xml")), new Map([["AAAAAAAAAA1|public_feed", { views: 337, ratings: 12 }], ["BBBBBBBBBB2|public_feed", { views: 18 }]]));
+  const again = planMerge(await repo.listVideos(db), parseChannelFeed(fixture("feed.xml")), new Map<string, Record<string, number>>([["AAAAAAAAAA1|public_feed", { views: 337, ratings: 12 }], ["BBBBBBBBBB2|public_feed", { views: 18 }]]));
   assert.equal(again.added.length, 0);
   assert.equal(again.unchanged.length, 2);
   assert.equal(again.notReturned.length, 1, "videos missing from the feed are reported, not deleted");

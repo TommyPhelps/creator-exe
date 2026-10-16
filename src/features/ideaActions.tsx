@@ -69,15 +69,20 @@ export function IdeaCard(props: { idea: GeneratedIdea; compact?: boolean; tonigh
         <Chip title="Estimated production effort">{EFFORT_LABEL[d.effort]} effort</Chip>
       </div>
       <p className="selectable">{g.premise}</p>
-      <div className="row small">
-        <span className="dim">Enjoyment</span>
-        <LevelMeter value={g.ratings.enjoyment} label="Likely personal enjoyment" />
-        <span className="dim">Feasibility</span>
-        <LevelMeter value={g.ratings.feasibility} label="Production feasibility" />
-        <span className="dim">Originality</span>
-        <LevelMeter value={g.ratings.originality} label="Originality" />
-        <span className="dim">Research</span>
-        <LevelMeter value={g.ratings.research} label="Research required" />
+      <div className="row small" style={{ gap: "4px 14px" }}>
+        {(
+          [
+            ["Enjoyment", g.ratings.enjoyment, "Likely personal enjoyment"],
+            ["Feasibility", g.ratings.feasibility, "Production feasibility"],
+            ["Originality", g.ratings.originality, "Originality"],
+            ["Research", g.ratings.research, "Research required"],
+          ] as const
+        ).map(([label, value, full]) => (
+          <span key={label} className="row nowrap" style={{ gap: 6 }}>
+            <span className="dim">{label}</span>
+            <LevelMeter value={value} label={full} />
+          </span>
+        ))}
       </div>
       <div className="row small">
         <Chip>{TIME_LABEL[d.time]}</Chip>

@@ -340,12 +340,14 @@ export function generateIdeas(
   }
 
   const recentShows = new Map<string, number[]>();
+  const recentSeeds = new Set<string>();
   for (const imp of ctx.impressions) {
     const d = daysBetween(imp.shownAt, now);
     if (d > 14) continue;
     const arr = recentShows.get(imp.ideaKey) ?? [];
     arr.push(d);
     recentShows.set(imp.ideaKey, arr);
+    if (d < 1) recentSeeds.add(imp.ideaKey.split(":")[0] ?? imp.ideaKey);
   }
 
   const scored: Scored[] = pool.map((c) => {
@@ -457,6 +459,8 @@ export function generateIdeas(
     if (shows?.length) {
       const recent = shows.filter((d) => d < 1).length;
       add(-Math.min(6, recent * 3 + (shows.length - recent)), "Shown to you recently");
+    } else if (recentSeeds.has(s.key)) {
+      add(-2, "A variation of this was shown to you today");
     }
 
     // Small jitter so repeated runs feel different.

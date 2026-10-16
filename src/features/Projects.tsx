@@ -42,7 +42,7 @@ export function Projects() {
 
   const moveTo = (p: Project, stage: Stage) => {
     if (p.stage === stage) return;
-    void act(() => updateProject(db, p.id, { stage, archived: stage === "archived" ? true : p.archived && stage !== "archived" ? false : p.archived }), {
+    void act(() => updateProject(db, p.id, { stage, archived: stage === "archived" }), {
       title: stage === "published" ? "SHIPPED" : "STAGE UPDATED",
       body: `${p.title} -> ${stageLabel(stage)}`,
     });
