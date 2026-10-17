@@ -40,3 +40,32 @@ Run these on the installed app. Each maps to a success workflow in the brief.
 **Creator Memory**
 1. First launch shows "Creator Memory starts with 19 interests from your brief".
 2. Delete one, add one ("Tired of: food challenges"). Generate ideas. Pass if food-challenge ideas sink and the deleted interest doesn't come back on restart.
+
+## v0.1.1
+
+**Gaming first**
+1. Install over 0.1.0 and open the app. A notice says how many interests moved to Personal and which gaming preferences were added.
+2. Idea Machine → Generate five times. Pass if every idea is about games (an occasional "Gaming-adjacent tech" card is expected) and nothing like "build a website with 2003 tools" or "draw an object every day" appears.
+3. Try Tonight, Zero budget, Deep dive, Random, and each Interest option. Pass if none of them leaves gaming.
+4. Press **Explore outside my niche**. Pass if unrelated ideas appear *with* a banner, and the next normal Generate is back to gaming.
+
+**Content Focus**
+1. Pick **Gaming only**, generate a few batches. Pass if no tech cards appear.
+2. Type 50 / 50 / 0. Pass if the preset shows Custom and tech cards become frequent.
+
+**Your library**
+1. In REWIND, back up your library; in CREATOR.EXE → Creator Memory → Game Library → Import, pick that file.
+2. Generate with **Zero budget**. Pass if every idea says In your library, Free, or needs no game, and none says you'd need to buy something.
+3. Pass if an idea about a game you don't own says "Not in your imported library".
+
+**Feedback**
+1. On a Morrowind idea choose *I like Morrowind*; generate three batches. Pass if Morrowind shows up again but not in every batch, and never twice in one batch.
+2. On a modding idea choose *No mods & modpacks videos*. Pass if that kind of video mostly disappears for a while (it fades over months).
+3. Press **More like this** on a card. Pass if the new batch is related (same kind of video or topic) but not the same idea.
+
+**Channel DNA**
+1. Re-import the public feed. Pass if your gaming videos are labelled with games/genres from their titles, nothing is labelled Film & media because of a link, and unclear videos say Unknown.
+2. Open a video, add a topic yourself. Pass if it replaces the automatic ones and "Back to automatic" restores them.
+
+**Readability**
+1. On the 1440p monitor, pass if idea cards are readable without leaning in, three cards fill the width, and Details expands the rest.

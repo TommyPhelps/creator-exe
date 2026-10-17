@@ -50,7 +50,7 @@ that interface, so the same code runs inside the Windows app (`tauri.ts`) and in
 a real SQLite database (`tests/helpers/sqliteDb.ts`). A plain browser cannot open the app's
 database and gets a clear boot error instead of fake data.
 
-## Data model (schema v1)
+## Data model (schema v2)
 
 | Table | Holds |
 |---|---|
@@ -64,9 +64,23 @@ database and gets a clear boot error instead of fake data.
 | `research_items` | Sources and notes: URL, publisher, published date, last checked, verification status, the creator's own conclusions kept separate |
 | `thumbnails` | Editable layered documents (JSON), linked to projects |
 | `title_candidates` / `packages` | Title Lab candidates and versioned upload packages |
+| `games` | Your imported game library (v2): title, ownership, playtime, Steam app ID, tags, source file |
+| `game_info` | Cached Steam store lookups (v2): matched name, cover URL, free flag, price text, date checked |
+
+v2 also added `profile_items.scope` (channel / personal / watching), `videos.user_subjects` (your own topics) and `idea_feedback.detail` (what a reaction was about).
 
 Migrations are append-only and run at boot; the boot screen reports the schema version and the
 app shows a notice after an upgrade. A safety backup is written before restores.
+
+## Recommendation engine (v0.1.1)
+
+`src/domain/ideas/generator.ts` runs in a fixed order so modes and filters compose predictably:
+
+1. Expand the library into candidates (concept × game). Each candidate has a content domain (gaming / gaming-tech / other), a video type, genres from the games catalog, an era and an ownership status (from your imported library only).
+2. Hard gates that never relax: Content Focus (a 0% domain is ineligible), budget and no-purchase rules, time cap, avoid-list, blocked feedback, ideas already saved.
+3. Soft filters (genre, era, style, effort...) relaxed least-important first, always inside the gates.
+4. Scoring: channel-scope interests, favorite games, library, inspiration games, learned weights per subject / game / video type / concept (fading, capped), interest direction within the focus, mode shaping, recency penalties.
+5. Slots assigned to domains by deficit against the focus over recent batches (`focus.ts`), filled greedily with no repeated concept, game or video type; one slot is reserved for something new.
 
 ## Evidence model
 
