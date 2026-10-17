@@ -20,6 +20,7 @@ export function bridgePlatform(bridge: PreviewBridge): Platform {
     kind: "bridge",
     db,
     info: async () => ({ version: "preview", dataDir: "(preview)", dbPath: "(preview)", platform: "preview" }),
+    inspectVideo: unavailable("Local video analysis"),
     http: unavailable("Network access"),
     httpBinary: unavailable("Network access"),
     files: {

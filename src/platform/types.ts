@@ -45,10 +45,14 @@ export interface FileFilter {
   extensions: string[];
 }
 
+import type { LocalMediaAnalysis } from "../domain/channel/forensics.ts";
+
 export interface Platform {
   kind: "tauri" | "bridge" | "browser";
   db: Db;
   info(): Promise<AppInfo>;
+  /** User-selected original file, analyzed only on this PC. */
+  inspectVideo(path: string): Promise<LocalMediaAnalysis>;
   http(url: string, req?: HttpRequest): Promise<HttpResult>;
   /** Fetches binary content and returns it base64 encoded. */
   httpBinary(url: string, signal?: AbortSignal): Promise<{ status: number; base64: string; contentType: string }>;

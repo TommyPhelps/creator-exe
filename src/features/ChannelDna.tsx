@@ -6,6 +6,7 @@ import { importChannelViaApi, parseChannelInput } from "../domain/channel/dataAp
 import { parseStudioCsv } from "../domain/channel/studioCsv.ts";
 import { applyMerge, extractVideoId, planMerge, type MergePlan } from "../domain/channel/merge.ts";
 import { summarizeChannel } from "../domain/channel/analyze.ts";
+import { ChannelForensics } from "./ChannelForensics.tsx";
 import type { ImportBatch } from "../domain/channel/types.ts";
 import { SECRET_YOUTUBE_KEY } from "../domain/settings.ts";
 import { FEEDBACK_FLAGS, type EvidenceSource, type FeedbackFlag, type Video, type VideoFeedback } from "../domain/types.ts";
@@ -406,9 +407,9 @@ export function ThumbImg({ src }: { src: string }) {
 type Sort = "newest" | "oldest" | "views" | "longest" | "loved";
 
 export function ChannelDna() {
-  const { db, confirm } = useApp();
+  const { db, confirm, settings, updateSettings, platform } = useApp();
   const act = useAction();
-  const [tab, setTab] = useState<"library" | "patterns" | "import">("library");
+  const [tab, setTab] = useState<"library" | "patterns" | "import" | "identity" | "forensics">("library");
   const [plan, setPlan] = useState<MergePlan | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -457,18 +458,49 @@ export function ChannelDna() {
       <PageHead
         sys="CHANNEL DNA :: ARCHIVE"
         title="Your channel, with receipts"
-        lede="Every pattern links to the videos and words that produced it. Labels come from simple keyword matches on titles and descriptions: nothing here has watched your videos."
+        lede="Your uploads, creator-owned branding, and optional local footage evidence. Metadata patterns are not the same as watching your videos."
       />
       <Tabs
         value={tab}
         tabs={[
           { id: "library", label: "Library", badge: data?.videos.length ?? 0 },
           { id: "patterns", label: "Patterns & evidence" },
+          { id: "forensics", label: "Local video evidence" },
+          { id: "identity", label: "Tamster branding" },
           { id: "import", label: "Import & data" },
         ]}
         onChange={setTab}
       />
       <div className="tabpanel">
+        {tab === "identity" ? (
+          <div className="grid cols-2">
+            <Win title="YOUR CHANNEL :: CREATOR-OWNED IDENTITY" icon="channel">
+              <p className="small dim">Latest personal direction: gaming first, occasional tech, homemade old-YouTube memes. This profile is yours and is not replaced by public channel metadata.</p>
+              <Field label="Display name">
+                {(id) => <TextInput id={id} value={settings.channelIdentity.displayName} onCommit={(v) => void updateSettings({ channelIdentity: { ...settings.channelIdentity, displayName: v } })} />}
+              </Field>
+              <Field label="Exact channel description — preserve your wording">
+                {(id) => <TextArea id={id} rows={7} value={settings.channelIdentity.description} onCommit={(v) => void updateSettings({ channelIdentity: { ...settings.channelIdentity, description: v } })} />}
+              </Field>
+              <p className="dim small">"Always low quality :)" is your joke, not an instruction to degrade real recording or audio quality.</p>
+              <Button icon="link" onClick={() => void platform.openUrl("https://www.youtube.com/channel/UCGnpORs6LGRRb1b7y39wumw")}>Open real channel</Button>
+            </Win>
+            <Win title="ART DIRECTION :: USER-MADE" icon="thumbnail">
+              <p className="dim small">Your actual branding uses the laser-eyed cat avatar and the pink-tinted cats + old-computer banner. These are notes, not generated or recreated images.</p>
+              <Field label="Avatar description">
+                {(id) => <TextArea id={id} rows={2} value={settings.channelIdentity.avatarNote} onCommit={(v) => void updateSettings({ channelIdentity: { ...settings.channelIdentity, avatarNote: v } })} />}
+              </Field>
+              <Field label="Banner description">
+                {(id) => <TextArea id={id} rows={2} value={settings.channelIdentity.bannerNote} onCommit={(v) => void updateSettings({ channelIdentity: { ...settings.channelIdentity, bannerNote: v } })} />}
+              </Field>
+              <Field label="Personal thumbnail/branding style">
+                {(id) => <TextArea id={id} rows={3} value={settings.channelIdentity.visualStyle} onCommit={(v) => void updateSettings({ channelIdentity: { ...settings.channelIdentity, visualStyle: v } })} />}
+              </Field>
+              <Note>Game screenshots, real photos, awkward memes and manually arranged layers are the default. AI artwork is not required. Your creative decisions remain yours.</Note>
+            </Win>
+          </div>
+        ) : null}
+        {tab === "forensics" ? <ChannelForensics videos={data?.videos ?? []} /> : null}
         {tab === "import" || (tab === "library" && data && data.videos.length === 0) ? (
           <div className="grid cols-2">
             <ImportPanel
@@ -495,7 +527,7 @@ export function ChannelDna() {
                 </dt>
                 <dd>Anything you type in.</dd>
               </dl>
-              <Note>Planned for later phases: signing in with Google (OAuth) for private analytics and retention, transcript import, and optional analysis of your original video files.</Note>
+              <Note>Private YouTube Analytics OAuth is planned for later. Local footage, transcripts and your own thumbnails can now be inspected in the Local video evidence tab (FFmpeg required for video signals).</Note>
               {data && data.videos.length ? (
                 <Button
                   variant="danger"

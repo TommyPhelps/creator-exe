@@ -5,6 +5,7 @@
 pub mod db;
 pub mod files;
 pub mod secrets;
+pub mod media;
 
 use serde::Serialize;
 use serde_json::{Map, Value};
@@ -190,7 +191,8 @@ pub fn run() {
             secret_get,
             secret_delete,
             reveal_folder,
-            launch_program
+            launch_program,
+            media::inspect_local_video
         ])
         .run(tauri::generate_context!())
         .expect("error while running CREATOR.EXE");

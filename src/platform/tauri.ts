@@ -53,6 +53,7 @@ export const tauriPlatform: Platform = {
   kind: "tauri",
   db,
   info: () => invoke<AppInfo>("app_info"),
+  inspectVideo: (path) => invoke("inspect_local_video", { path }),
   http,
   async httpBinary(url, signal) {
     const t = withTimeout(signal ? { signal } : undefined);

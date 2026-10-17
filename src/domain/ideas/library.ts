@@ -48,7 +48,10 @@ export interface IdeaSeed {
   variants?: { slot: string; values: string[] };
 }
 
+import { GAMING_IDEAS } from "./gaming.ts";
+
 export const IDEA_LIBRARY: IdeaSeed[] = [
+  ...GAMING_IDEAS,
   // ------------------------------------------------------------ retro computing / old OS
   {
     key: "daily-driver-old-os",

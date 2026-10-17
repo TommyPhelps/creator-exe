@@ -40,3 +40,24 @@ Run these on the installed app. Each maps to a success workflow in the brief.
 **Creator Memory**
 1. First launch shows "Creator Memory starts with 19 interests from your brief".
 2. Delete one, add one ("Tired of: food challenges"). Generate ideas. Pass if food-challenge ideas sink and the deleted interest doesn't come back on restart.
+
+
+## Phase 2 — Tamster identity, local video evidence and gaming-first ideas
+
+1. **Back up the installed v0.1.0 database before upgrading** using File → Back up data.
+2. Install the Phase 2 build over v0.1.0. Confirm your 15 imported uploads, saved Morrowind project, reactions and Creator Memory remain.
+3. Channel DNA → Tamster branding: verify display name **Tamster**, red-laser-cat avatar note, handmade pink/cat/old-PC banner note, and the exact three-paragraph description. Edit a phrase, reopen the app, confirm it persists, then restore the original if desired.
+4. Idea Machine: Content Focus → Gaming first. Generate several batches in Tonight, Random, and Completely new. Every recommendation should stay gaming or gaming-adjacent tech. Gaming only must exclude pure tech. Variety must allow broader experiments. Confirm user feedback and existing projects persist.
+5. Channel DNA → Patterns & evidence: imported gaming uploads must **not** all appear as Film & media because their descriptions mention TV.
+6. Channel DNA → Local video evidence: select one imported upload. Choose an original MP4, MOV, MKV, or WebM file on your PC (not a YouTube URL). With FFmpeg + FFprobe on PATH, wait for local analysis. Expect total duration/resolution and scene/quiet-audio markers for **at most the first 90 seconds**. A scene marker is not a confirmed editing cut.
+7. Import an actual **SRT or WebVTT** transcript for the same video. Confirm that timecodes and words appear; TXT imports honestly say they are not timecoded.
+8. Import one of your original thumbnail PNG/JPG files. Confirm six observed color swatches appear. They are pixel samples, not alleged AI design judgments.
+9. Write personal observations and tags, switch to another video and back, and restart the app. Confirm the right evidence stays attached to each stable YouTube video ID.
+10. File → Back up data: verify the backup includes a video_forensics table but **no API keys**. Restore only after inspecting the preview; old v0.1.0 backups should also import.
+11. If no FFmpeg is installed, the video button must show an actionable message rather than claiming analysis completed.
+
+### Current limits
+- This phase inspects local original footage only with user permission. It cannot automatically watch YouTube videos or download them; it cannot identify jokes, intent, personalities or edit decisions.
+- FFmpeg/FFprobe are separate optional tools; no automatic binary download is bundled.
+- No automatic video frame gallery, semantic thumbnail analysis or YouTube OAuth yet; future phases may extend these.
+- There is no Comedy Engine or Editing Companion.

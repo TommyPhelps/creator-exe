@@ -172,6 +172,23 @@ export const MIGRATIONS: Migration[] = [
       )`,
     ],
   },
+  {
+    version: 2,
+    name: "local video forensics and creator-controlled evidence",
+    statements: [
+      `CREATE TABLE video_forensics (
+        video_id TEXT PRIMARY KEY REFERENCES videos(id) ON DELETE CASCADE,
+        media_json TEXT NOT NULL DEFAULT 'null',
+        transcript_json TEXT NOT NULL DEFAULT 'null',
+        transcript_filename TEXT NOT NULL DEFAULT '',
+        thumbnail_palette TEXT NOT NULL DEFAULT '[]',
+        thumbnail_filename TEXT NOT NULL DEFAULT '',
+        creator_notes TEXT NOT NULL DEFAULT '',
+        creator_tags TEXT NOT NULL DEFAULT '[]',
+        updated_at TEXT NOT NULL
+      )`,
+    ],
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1]?.version ?? 0;
@@ -193,6 +210,7 @@ export const BACKUP_TABLES = [
   "thumbnails",
   "title_candidates",
   "packages",
+  "video_forensics",
 ] as const;
 
 export type BackupTable = (typeof BACKUP_TABLES)[number];

@@ -25,3 +25,22 @@ are bundled or invented. The installed app fetches them on your PC through
 - The channel description and banner were later changed to Notion/productivity systems, which
   suggests a pivot that may or may not still interest you. The idea library has a couple of
   productivity-system ideas for that reason; delete or "Not interested" them if it's done.
+
+
+## Creator-confirmed identity update (2026-10-17)
+
+The stable YouTube channel ID is **UCGnpORs6LGRRb1b7y39wumw**; the display name the creator currently uses is **Tamster**, superseding older TamsterCo references.
+
+Current user-authored description (do not rewrite or treat as AI generated):
+
+> Just a guy who likes games, old computers, and weird shit.
+>
+> I mostly do gaming videos with the occasional tech stuff thrown in.
+>
+> My videos are never on schedule and always low quality :)
+
+Visual identity from a user-provided channel screenshot: a **gray meme cat with red laser eyes** as avatar; a **pink-tinted homemade cat/retro-computer collage** and Windows-style TAMSTER / LOW QUALITY GAMING VIDEOS dialog as banner. This is a playful low-quality *aesthetic*, not a request to damage actual media quality.
+
+The creator explicitly wants **gaming-first ideas**, with occasional gaming-related/retro technology; no unrelated lifestyle prompts unless opting into an out-of-niche mode. Two liked ideas were a first-time Morrowind video and a short unsettling itch.io horror game. These are positive examples, not templates to repeat indefinitely.
+
+Only public metadata was available at Phase 1. **We have NOT watched the creator's videos**. Phase 2 adds opt-in local media inspection, transcript ingestion and manual evidence notes; do not label its algorithmic scene change observations as an identified edit cut or joke.
