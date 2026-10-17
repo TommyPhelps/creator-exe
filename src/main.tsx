@@ -6,6 +6,7 @@ import { loadPlatform } from "./platform/index.ts";
 import { migrate } from "./db/migrate.ts";
 import { loadSettings, saveSettings } from "./domain/settings.ts";
 import { seedProfileFromBrief } from "./domain/brief.ts";
+import { upgradeProfileTo011 } from "./domain/upgrade011.ts";
 
 const rootEl = document.getElementById("root");
 if (!rootEl) throw new Error("missing #root");
@@ -56,6 +57,17 @@ async function boot() {
       if (added) {
         show(`> CREATOR MEMORY ....... ${added} ENTRIES FROM YOUR BRIEF`);
         notes.push(`Creator Memory starts with ${added} interests from your brief. Edit or delete them any time.`);
+      }
+    }
+    if (!settings.v011Upgraded) {
+      const r = await upgradeProfileTo011(platform.db);
+      settings = { ...settings, v011Upgraded: true };
+      await saveSettings(platform.db, settings);
+      show(`> CONTENT FOCUS ........ GAMING FIRST`);
+      if (r.movedToPersonal.length || r.added.length) {
+        notes.push(
+          `Gaming first: ${r.movedToPersonal.length} non-gaming interests are now marked Personal (kept, but they no longer steer ideas) and ${r.added.length} gaming preferences were added. Review them in Creator Memory.`,
+        );
       }
     }
     show("> SYSTEM ONLINE");

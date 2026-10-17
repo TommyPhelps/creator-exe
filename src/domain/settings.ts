@@ -2,6 +2,7 @@
 import type { Db } from "../platform/types.ts";
 import { getSetting, setSetting } from "../db/repos.ts";
 import type { GeneratorControls } from "./ideas/generator.ts";
+import { DEFAULT_FOCUS, normalizeFocus, type ContentFocus } from "./ideas/focus.ts";
 
 export const THEMES = [
   { id: "midnight-2003", label: "Midnight 2003" },
@@ -27,6 +28,12 @@ export interface AppSettings {
   onboarded: boolean;
   /** True once the starting profile from the brief was offered (never re-added after you delete it). */
   briefSeeded: boolean;
+  /** What share of ideas comes from gaming, gaming-adjacent tech and other subjects. */
+  contentFocus: ContentFocus;
+  /** Look up game covers and prices on the Steam store (sends only game names). */
+  gameCovers: boolean;
+  /** True once the v0.1.1 personal/channel interest split has run. */
+  v011Upgraded: boolean;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -41,13 +48,16 @@ export const DEFAULT_SETTINGS: AppSettings = {
   navCollapsed: false,
   onboarded: false,
   briefSeeded: false,
+  contentFocus: DEFAULT_FOCUS,
+  gameCovers: true,
+  v011Upgraded: false,
 };
 
 export const SECRET_YOUTUBE_KEY = "youtube_api_key";
 
 export async function loadSettings(db: Db): Promise<AppSettings> {
   const stored = await getSetting<Partial<AppSettings>>(db, "app", {});
-  return { ...DEFAULT_SETTINGS, ...stored, generator: { ...(stored.generator ?? {}) } };
+  return { ...DEFAULT_SETTINGS, ...stored, generator: { ...(stored.generator ?? {}) }, contentFocus: normalizeFocus(stored.contentFocus ?? DEFAULT_FOCUS) };
 }
 
 export async function saveSettings(db: Db, s: AppSettings): Promise<void> {

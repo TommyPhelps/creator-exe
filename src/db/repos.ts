@@ -1,12 +1,14 @@
 // Typed repositories over the SQLite schema. Every function takes the Db so it
 // runs identically in the Windows app and in tests.
 
-import type { Db } from "../platform/types.ts";
+import type { Db, Statement } from "../platform/types.ts";
+import type { LibraryGame } from "../domain/games/library.ts";
 import { newId, nowIso, parseJson } from "../lib/util.ts";
 import type {
   Complexity,
   Durability,
   EvidenceSource,
+  FeedbackDetail,
   FeedbackFlag,
   Idea,
   IdeaDetails,
@@ -16,6 +18,7 @@ import type {
   PackageContent,
   ProfileItem,
   ProfileKind,
+  ProfileScope,
   Project,
   ProjectDetails,
   ProjectEvent,
@@ -59,6 +62,7 @@ const toProfile = (r: Row): ProfileItem => ({
   kind: str(r.kind) as ProfileKind,
   value: str(r.value),
   durability: str(r.durability) as Durability,
+  scope: (str(r.scope) || "channel") as ProfileScope,
   note: str(r.note),
   createdAt: str(r.created_at),
   updatedAt: str(r.updated_at),
@@ -74,25 +78,27 @@ export async function addProfileItem(
   value: string,
   durability: Durability = "enduring",
   note = "",
+  scope: ProfileScope = "channel",
 ): Promise<ProfileItem> {
   const t = nowIso();
-  const item: ProfileItem = { id: newId(), kind, value: value.trim(), durability, note, createdAt: t, updatedAt: t };
+  const item: ProfileItem = { id: newId(), kind, value: value.trim(), durability, scope, note, createdAt: t, updatedAt: t };
   await db.execute(
-    "INSERT INTO profile_items (id, kind, value, durability, note, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-    [item.id, kind, item.value, durability, note, t, t],
+    "INSERT INTO profile_items (id, kind, value, durability, scope, note, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+    [item.id, kind, item.value, durability, scope, note, t, t],
   );
   return item;
 }
 
-export async function updateProfileItem(db: Db, id: string, patch: Partial<Pick<ProfileItem, "value" | "durability" | "note" | "kind">>): Promise<void> {
+export async function updateProfileItem(db: Db, id: string, patch: Partial<Pick<ProfileItem, "value" | "durability" | "note" | "kind" | "scope">>): Promise<void> {
   const rows = await db.select<Row>("SELECT * FROM profile_items WHERE id = ?", [id]);
   if (!rows[0]) return;
   const cur = toProfile(rows[0]);
   const next = { ...cur, ...patch };
-  await db.execute("UPDATE profile_items SET kind = ?, value = ?, durability = ?, note = ?, updated_at = ? WHERE id = ?", [
+  await db.execute("UPDATE profile_items SET kind = ?, value = ?, durability = ?, scope = ?, note = ?, updated_at = ? WHERE id = ?", [
     next.kind,
     next.value,
     next.durability,
+    next.scope,
     next.note,
     nowIso(),
     id,
@@ -119,6 +125,7 @@ const toVideo = (r: Row): Video => ({
   userFormat: str(r.user_format),
   userEffort: numOrNull(r.user_effort),
   userNotes: str(r.user_notes),
+  userSubjects: parseJson<string[]>(r.user_subjects, []),
   relatedProjectId: strOrNull(r.related_project_id),
   createdAt: str(r.created_at),
   updatedAt: str(r.updated_at),
@@ -136,14 +143,14 @@ export async function getVideo(db: Db, id: string): Promise<Video | null> {
 export async function updateVideoAnnotations(
   db: Db,
   id: string,
-  patch: Partial<Pick<Video, "userCategory" | "userFormat" | "userEffort" | "userNotes" | "relatedProjectId">>,
+  patch: Partial<Pick<Video, "userCategory" | "userFormat" | "userEffort" | "userNotes" | "relatedProjectId" | "userSubjects">>,
 ): Promise<void> {
   const v = await getVideo(db, id);
   if (!v) return;
   const n = { ...v, ...patch };
   await db.execute(
-    "UPDATE videos SET user_category = ?, user_format = ?, user_effort = ?, user_notes = ?, related_project_id = ?, updated_at = ? WHERE id = ?",
-    [n.userCategory, n.userFormat, n.userEffort, n.userNotes, n.relatedProjectId, nowIso(), id],
+    "UPDATE videos SET user_category = ?, user_format = ?, user_effort = ?, user_notes = ?, related_project_id = ?, user_subjects = ?, updated_at = ? WHERE id = ?",
+    [n.userCategory, n.userFormat, n.userEffort, n.userNotes, n.relatedProjectId, JSON.stringify(n.userSubjects), nowIso(), id],
   );
 }
 
@@ -316,16 +323,18 @@ const toFeedbackRow = (r: Row): IdeaFeedback => ({
   ideaKey: str(r.idea_key),
   reaction: str(r.reaction) as Reaction,
   subjects: parseJson<string[]>(r.subjects, []),
+  detail: parseJson<FeedbackDetail>(r.detail, {}),
   createdAt: str(r.created_at),
 });
 
-export async function recordIdeaFeedback(db: Db, ideaKey: string, reaction: Reaction, subjects: string[]): Promise<IdeaFeedback> {
-  const fb: IdeaFeedback = { id: newId(), ideaKey, reaction, subjects, createdAt: nowIso() };
-  await db.execute("INSERT INTO idea_feedback (id, idea_key, reaction, subjects, created_at) VALUES (?, ?, ?, ?, ?)", [
+export async function recordIdeaFeedback(db: Db, ideaKey: string, reaction: Reaction, subjects: string[], detail: FeedbackDetail = {}): Promise<IdeaFeedback> {
+  const fb: IdeaFeedback = { id: newId(), ideaKey, reaction, subjects, detail, createdAt: nowIso() };
+  await db.execute("INSERT INTO idea_feedback (id, idea_key, reaction, subjects, detail, created_at) VALUES (?, ?, ?, ?, ?, ?)", [
     fb.id,
     ideaKey,
     reaction,
     JSON.stringify(subjects),
+    JSON.stringify(detail),
     fb.createdAt,
   ]);
   return fb;
@@ -732,4 +741,105 @@ export async function savePackage(db: Db, pkg: { id?: string; projectId: string;
 
 export async function deletePackage(db: Db, id: string): Promise<void> {
   await db.execute("DELETE FROM packages WHERE id = ?", [id]);
+}
+
+// ---------------------------------------------------------------- game library (imported by you) and store lookups
+
+
+const toGame = (r: Row): LibraryGame => ({
+  title: str(r.title),
+  canon: str(r.canon),
+  platform: str(r.platform) || "PC",
+  ownership: (str(r.ownership) || "unknown") as LibraryGame["ownership"],
+  status: strOrNull(r.status),
+  rating: numOrNull(r.rating),
+  favorite: num(r.favorite) === 1,
+  playtimeMin: numOrNull(r.playtime_min),
+  steamAppId: numOrNull(r.steam_app_id),
+  releaseYear: numOrNull(r.release_year),
+  tags: parseJson<string[]>(r.tags, []),
+  source: str(r.source),
+});
+
+export async function listGames(db: Db): Promise<LibraryGame[]> {
+  return (await db.select<Row>("SELECT * FROM games ORDER BY title COLLATE NOCASE")).map(toGame);
+}
+
+/** Adds or updates games by canonical title. "replace" clears the library first. Returns how many rows were written. */
+export async function saveGames(db: Db, games: LibraryGame[], mode: "merge" | "replace" = "merge"): Promise<number> {
+  const t = nowIso();
+  const statements: Statement[] = mode === "replace" ? [{ sql: "DELETE FROM games" }] : [];
+  for (const g of games) {
+    statements.push({
+      sql: `INSERT INTO games (canon, title, platform, ownership, status, rating, favorite, playtime_min, steam_app_id, release_year, tags, source, imported_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(canon) DO UPDATE SET title = excluded.title, platform = excluded.platform,
+              ownership = CASE WHEN excluded.ownership = 'unknown' THEN games.ownership ELSE excluded.ownership END,
+              status = COALESCE(excluded.status, games.status), rating = COALESCE(excluded.rating, games.rating),
+              favorite = MAX(excluded.favorite, games.favorite), playtime_min = COALESCE(excluded.playtime_min, games.playtime_min),
+              steam_app_id = COALESCE(excluded.steam_app_id, games.steam_app_id), release_year = COALESCE(excluded.release_year, games.release_year),
+              tags = excluded.tags, source = excluded.source, imported_at = excluded.imported_at`,
+      params: [g.canon, g.title, g.platform, g.ownership, g.status, g.rating, g.favorite ? 1 : 0, g.playtimeMin, g.steamAppId, g.releaseYear, JSON.stringify(g.tags), g.source, t],
+    });
+  }
+  return db.batch(statements);
+}
+
+export async function setGameOwnership(db: Db, canonTitle: string, ownership: LibraryGame["ownership"]): Promise<void> {
+  await db.execute("UPDATE games SET ownership = ? WHERE canon = ?", [ownership, canonTitle]);
+}
+
+export async function deleteAllGames(db: Db): Promise<void> {
+  await db.execute("DELETE FROM games");
+}
+
+export interface GameInfo {
+  canon: string;
+  query: string;
+  status: "found" | "not_found" | "error";
+  steamAppId: number | null;
+  steamName: string | null;
+  imageUrl: string | null;
+  isFree: boolean | null;
+  priceText: string | null;
+  source: string;
+  checkedAt: string;
+}
+
+const toGameInfo = (r: Row): GameInfo => ({
+  canon: str(r.canon),
+  query: str(r.query),
+  status: str(r.status) as GameInfo["status"],
+  steamAppId: numOrNull(r.steam_app_id),
+  steamName: strOrNull(r.steam_name),
+  imageUrl: strOrNull(r.image_url),
+  isFree: r.is_free === null || r.is_free === undefined ? null : num(r.is_free) === 1,
+  priceText: strOrNull(r.price_text),
+  source: str(r.source),
+  checkedAt: str(r.checked_at),
+});
+
+export async function getGameInfo(db: Db, canonTitle: string): Promise<GameInfo | null> {
+  const rows = await db.select<Row>("SELECT * FROM game_info WHERE canon = ?", [canonTitle]);
+  return rows[0] ? toGameInfo(rows[0]) : null;
+}
+
+export async function saveGameInfo(db: Db, info: GameInfo): Promise<void> {
+  await db.execute(
+    `INSERT INTO game_info (canon, query, status, steam_app_id, steam_name, image_url, is_free, price_text, source, checked_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(canon) DO UPDATE SET query = excluded.query, status = excluded.status, steam_app_id = excluded.steam_app_id,
+       steam_name = excluded.steam_name, image_url = excluded.image_url, is_free = excluded.is_free, price_text = excluded.price_text,
+       source = excluded.source, checked_at = excluded.checked_at`,
+    [info.canon, info.query, info.status, info.steamAppId, info.steamName, info.imageUrl, info.isFree === null ? null : info.isFree ? 1 : 0, info.priceText, info.source, info.checkedAt],
+  );
+}
+
+export async function clearGameInfo(db: Db): Promise<void> {
+  await db.execute("DELETE FROM game_info");
+}
+
+export async function getGame(db: Db, canonTitle: string): Promise<LibraryGame | null> {
+  const rows = await db.select<Row>("SELECT * FROM games WHERE canon = ?", [canonTitle]);
+  return rows[0] ? toGame(rows[0]) : null;
 }

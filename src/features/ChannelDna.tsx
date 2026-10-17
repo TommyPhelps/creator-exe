@@ -5,7 +5,8 @@ import { channelPageUrl, extractChannelIdFromPage, feedUrl, parseChannelFeed } f
 import { importChannelViaApi, parseChannelInput } from "../domain/channel/dataApi.ts";
 import { parseStudioCsv } from "../domain/channel/studioCsv.ts";
 import { applyMerge, extractVideoId, planMerge, type MergePlan } from "../domain/channel/merge.ts";
-import { summarizeChannel } from "../domain/channel/analyze.ts";
+import { summarizeChannel, type VideoReading } from "../domain/channel/analyze.ts";
+import { SUBJECTS, subjectLabel } from "../domain/ideas/subjects.ts";
 import type { ImportBatch } from "../domain/channel/types.ts";
 import { SECRET_YOUTUBE_KEY } from "../domain/settings.ts";
 import { FEEDBACK_FLAGS, type EvidenceSource, type FeedbackFlag, type Video, type VideoFeedback } from "../domain/types.ts";
@@ -272,7 +273,7 @@ function PlanDialog({ plan, onClose }: { plan: MergePlan; onClose: () => void })
   );
 }
 
-function VideoDetail({ video, feedback, onClose }: { video: Video; feedback: VideoFeedback | null; onClose: () => void }) {
+function VideoDetail({ video, feedback, reading, onClose }: { video: Video; feedback: VideoFeedback | null; reading: VideoReading | null; onClose: () => void }) {
   const { db, platform, confirm } = useApp();
   const act = useAction();
   const { data } = useData(async () => ({ metrics: await listMetrics(db, video.id), projects: await listProjects(db, true) }), [video.id]);
@@ -298,6 +299,57 @@ function VideoDetail({ video, feedback, onClose }: { video: Video; feedback: Vid
           Open on YouTube
         </Button>
       ) : null}
+
+      <div className="groupbox">
+        <legend>Topics</legend>
+        {video.userSubjects.length ? (
+          <p className="dim small">You set these topics yourself; automatic detection is switched off for this video.</p>
+        ) : reading?.unknown ? (
+          <p className="dim small">Unknown: the title and description don't give enough evidence. Pick topics below if you want.</p>
+        ) : (
+          <p className="dim small">Detected from the title and description (links and lines repeated across your videos are ignored). Nothing here comes from watching the video.</p>
+        )}
+        <div className="stack tight">
+          {(reading?.subjects ?? []).filter((x) => !x.id.startsWith("user:")).map((x) => (
+            <div key={x.id} className={`row nowrap small ${x.confidence === "low" ? "conf-low" : ""}`}>
+              <Chip kind={x.confidence === "high" ? "ok" : undefined}>{x.label}</Chip>
+              <span className="dim">{x.confidence} confidence: {x.because}</span>
+            </div>
+          ))}
+        </div>
+        <Field label="Set topics yourself (replaces the automatic ones)">
+          {(id) => (
+            <select
+              id={id}
+              className="select"
+              value=""
+              onChange={(e) => {
+                const v = e.target.value;
+                if (v && !video.userSubjects.includes(v)) void act(() => updateVideoAnnotations(db, video.id, { userSubjects: [...video.userSubjects, v] }));
+              }}
+            >
+              <option value="">Add a topic...</option>
+              {SUBJECTS.map((x) => (
+                <option key={x.id} value={x.id}>
+                  {x.label}
+                </option>
+              ))}
+            </select>
+          )}
+        </Field>
+        {video.userSubjects.length ? (
+          <div className="row">
+            {video.userSubjects.map((id) => (
+              <Chip key={id} kind="accent" onRemove={() => void act(() => updateVideoAnnotations(db, video.id, { userSubjects: video.userSubjects.filter((x) => x !== id) }))}>
+                {subjectLabel(id)}
+              </Chip>
+            ))}
+            <Button size="small" onClick={() => void act(() => updateVideoAnnotations(db, video.id, { userSubjects: [] }))}>
+              Back to automatic
+            </Button>
+          </div>
+        ) : null}
+      </div>
 
       <div className="groupbox">
         <legend>Evidence: numbers by source</legend>
@@ -555,7 +607,7 @@ export function ChannelDna() {
                 ))}
               </div>
             </div>
-            {sel ? <VideoDetail video={sel} feedback={fbMap.get(sel.id) ?? null} onClose={() => setSelected(null)} /> : null}
+            {sel ? <VideoDetail video={sel} feedback={fbMap.get(sel.id) ?? null} reading={data?.summary.readings.get(sel.id) ?? null} onClose={() => setSelected(null)} /> : null}
           </div>
         ) : null}
 
@@ -596,7 +648,10 @@ export function ChannelDna() {
               </div>
               <div className="grid cols-2">
                 <Win title="RECURRING SUBJECTS" icon="ideas">
-                  <p className="dim small">Keyword matches on titles and descriptions. Click a row to see the videos.</p>
+                  <p className="dim small">
+                    Keyword matches on titles (strong) and descriptions (only after links and repeated sign-off lines are removed; one mention isn't enough). Click a row to see the videos.
+                    {s.unknownIds.length ? ` ${s.unknownIds.length} video${s.unknownIds.length > 1 ? "s have" : " has"} no confident topic and count as unknown; you can set topics in each video's details.` : ""}
+                  </p>
                   <table className="table">
                     <tbody>
                       {s.subjects.map((x) => (

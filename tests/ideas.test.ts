@@ -81,39 +81,42 @@ test("Make Something Tonight returns small ideas with a first-five-minutes plan"
   }
 });
 
-test("familiar, adjacent and new modes steer by channel history", () => {
-  const history = ctx({ familiarSubjects: new Set(["video-games", "survival-games", "horror-games", "challenge-runs"]) });
+test("familiar, adjacent and new modes steer within gaming", () => {
+  const history = ctx({ familiarSubjects: new Set(["video-games", "survival-games", "horror-games", "challenge-runs"]), favoriteGames: new Set(["elder scrolls iii morrowind", "morrowind"]) });
   const fam = generateIdeas({ interest: "familiar" }, history, { count: 3, rng: mulberry32(6) });
-  assert.ok(fam.ideas.every((i) => i.subjects.some((s) => history.familiarSubjects.has(s))));
+  assert.ok(fam.ideas.every((i) => i.domain !== "other"));
+  assert.ok(fam.ideas.every((i) => i.subjects.some((s) => history.familiarSubjects.has(s)) || i.games.some((g) => /morrowind/i.test(g))));
   const adj = generateIdeas({ interest: "adjacent" }, history, { count: 3, rng: mulberry32(7) });
-  assert.ok(adj.ideas.every((i) => !history.familiarSubjects.has(i.subjects[0] ?? "")), "adjacent ideas lead with a new subject");
+  assert.ok(adj.ideas.every((i) => i.domain !== "other"), "adjacent stays inside the focus");
+  assert.ok(adj.ideas.every((i) => !i.games.some((g) => /morrowind/i.test(g))), "adjacent avoids the games you already know");
   const fresh = generateIdeas({ interest: "new" }, history, { count: 3, rng: mulberry32(8) });
+  assert.ok(fresh.ideas.every((i) => i.domain !== "other"));
   assert.ok(fresh.ideas.every((i) => !i.subjects.some((s) => history.familiarSubjects.has(s))));
   const noHistory = generateIdeas({ interest: "familiar" }, ctx(), { rng: mulberry32(9) });
   assert.ok(noHistory.notes.some((n) => n.includes("Import your channel")));
 });
 
 test("feedback blocks rejected ideas for a while and fades over time", () => {
-  const all = generateIdeas({}, ctx(), { count: 200, rng: mulberry32(10) });
-  const target = all.ideas[0]!;
-  const fb: IdeaFeedback[] = [{ id: "1", ideaKey: target.key, reaction: "not_interested", subjects: target.subjects, createdAt: daysAgo(1) }];
-  const after = generateIdeas({}, ctx({ feedback: fb }), { count: 200, rng: mulberry32(10) });
-  assert.ok(!after.ideas.some((i) => i.key === target.key), "rejected idea is blocked");
-  const later = generateIdeas({}, ctx({ feedback: [{ ...fb[0]!, createdAt: daysAgo(90) }] }), { count: 200, rng: mulberry32(10) });
-  assert.ok(later.ideas.some((i) => i.key === target.key), "block expires");
-  const done: IdeaFeedback[] = [{ id: "2", ideaKey: target.key, reaction: "already_done", subjects: [], createdAt: daysAgo(400) }];
-  assert.ok(!generateIdeas({}, ctx({ feedback: done }), { count: 200, rng: mulberry32(10) }).ideas.some((i) => i.key === target.key));
+  const single = IDEA_LIBRARY.filter((x) => x.key === "dwarf-fortress-diary");
+  const target = generateIdeas({}, ctx(), { count: 1, rng: mulberry32(10), library: single }).ideas[0]!;
+  assert.ok(target, "the concept is suggested before any feedback");
+  const fb: IdeaFeedback[] = [{ id: "1", ideaKey: target.key, reaction: "not_interested", subjects: target.subjects, detail: {}, createdAt: daysAgo(1) }];
+  assert.equal(generateIdeas({}, ctx({ feedback: fb }), { count: 1, rng: mulberry32(10), library: single }).ideas.length, 0, "rejected idea is blocked");
+  const later = generateIdeas({}, ctx({ feedback: [{ ...fb[0]!, createdAt: daysAgo(90) }] }), { count: 1, rng: mulberry32(10), library: single });
+  assert.equal(later.ideas[0]?.key, target.key, "block expires");
+  const done: IdeaFeedback[] = [{ id: "2", ideaKey: target.key, reaction: "already_done", subjects: [], detail: {}, createdAt: daysAgo(400) }];
+  assert.equal(generateIdeas({}, ctx({ feedback: done }), { count: 1, rng: mulberry32(10), library: single }).ideas.length, 0);
 
-  const w1 = learnedSubjectWeights([{ id: "a", ideaKey: "x", reaction: "love", subjects: ["linux"], createdAt: daysAgo(0) }]);
-  const w2 = learnedSubjectWeights([{ id: "a", ideaKey: "x", reaction: "love", subjects: ["linux"], createdAt: daysAgo(90) }]);
+  const w1 = learnedSubjectWeights([{ id: "a", ideaKey: "x", reaction: "love", subjects: ["linux"], detail: {}, createdAt: daysAgo(0) }]);
+  const w2 = learnedSubjectWeights([{ id: "a", ideaKey: "x", reaction: "love", subjects: ["linux"], detail: {}, createdAt: daysAgo(90) }]);
   assert.ok((w1.get("linux") ?? 0) > (w2.get("linux") ?? 0) * 3, "45-day half-life");
 });
 
 test("loved subjects rise but do not take over every slot", () => {
-  const fb: IdeaFeedback[] = Array.from({ length: 6 }, (_, i) => ({ id: String(i), ideaKey: `k${i}`, reaction: "love" as const, subjects: ["linux"], createdAt: daysAgo(1) }));
+  const fb: IdeaFeedback[] = Array.from({ length: 6 }, (_, i) => ({ id: String(i), ideaKey: `k${i}`, reaction: "love" as const, subjects: ["horror-games"], detail: {}, createdAt: daysAgo(1) }));
   const r = generateIdeas({}, ctx({ feedback: fb }), { count: 3, rng: mulberry32(11) });
-  assert.ok(r.ideas.some((i) => i.subjects.includes("linux")));
-  assert.ok(r.ideas.some((i) => !i.subjects.includes("linux")), "diversity keeps other subjects in the mix");
+  assert.ok(r.ideas.some((i) => i.subjects.includes("horror-games")));
+  assert.ok(r.ideas.some((i) => !i.subjects.includes("horror-games")), "diversity keeps other subjects in the mix");
 });
 
 test("ideas shown recently are pushed back so repeated runs vary", () => {

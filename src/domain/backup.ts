@@ -21,7 +21,9 @@ const SECRET_SETTING = /(key|token|secret|password)/i;
 
 export async function createBackup(db: Db, appVersion: string): Promise<BackupFile> {
   const tables: BackupFile["tables"] = {};
+  const existing = new Set((await db.select<{ name: string }>("SELECT name FROM sqlite_master WHERE type = 'table'")).map((r) => r.name));
   for (const t of BACKUP_TABLES) {
+    if (!existing.has(t)) continue;
     let rows = await db.select<Record<string, unknown>>(`SELECT * FROM ${t}`);
     if (t === "settings") rows = rows.filter((r) => !SECRET_SETTING.test(String(r.key)));
     tables[t] = rows;

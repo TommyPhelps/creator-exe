@@ -3,7 +3,8 @@ import { useAction, useApp, type AppCtx } from "../app/context.tsx";
 import { createBackup, inspectBackup, restoreBackup } from "../domain/backup.ts";
 import { SECRET_YOUTUBE_KEY, THEMES, type Density } from "../domain/settings.ts";
 import type { AppInfo } from "../platform/types.ts";
-import { Button, Field, Note, PageHead, Segmented, Select, Win } from "../ui/kit.tsx";
+import { Button, Check, Field, Note, PageHead, Segmented, Select, Win } from "../ui/kit.tsx";
+import { clearGameInfo } from "../db/repos.ts";
 
 export async function runBackup(ctx: AppCtx): Promise<void> {
   try {
@@ -130,6 +131,7 @@ function YouTubeKey() {
 
 export function Settings() {
   const app = useApp();
+  const act = useAction();
   const { settings, updateSettings, platform } = app;
   const [info, setInfo] = useState<AppInfo | null>(null);
   const [template, setTemplate] = useState(settings.folderTemplate.join("\n"));
@@ -248,7 +250,18 @@ export function Settings() {
           <p className="small">
             <b>Current mode: No AI.</b> Idea suggestions, titles and thumbnail concepts come from curated libraries and rules that run entirely on this PC.
           </p>
-          <p className="small">Network use today: YouTube (only when you import), Wikipedia (only when you search), and image downloads for thumbnails you choose. Nothing is uploaded.</p>
+          <p className="small">
+            Network use today: YouTube (only when you import), Wikipedia (only when you search), image downloads for thumbnails you choose, and the Steam store for game covers and prices (below). Nothing is uploaded.
+          </p>
+          <div className="row">
+            <Check checked={app.settings.gameCovers} onChange={(v) => void app.updateSettings({ gameCovers: v })}>
+              Show game covers and current prices from the Steam store
+            </Check>
+            <Button size="small" onClick={() => void act(() => clearGameInfo(app.db), { title: "STORE INFO CLEARED", body: "Covers and prices will be looked up again." })}>
+              Clear cached store info
+            </Button>
+          </div>
+          <p className="dim small">Sends only game names (or the Steam app ID from your imported library) to store.steampowered.com. A cover or price is shown only when Steam's name matches the game exactly, with the date it was checked; results are kept for 30 days.</p>
           <Note>Optional local AI (Ollama) and cloud AI with your own API key are planned for Phase 3. They will always show which service receives your data and never run silently.</Note>
         </Win>
 

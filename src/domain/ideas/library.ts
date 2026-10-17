@@ -18,6 +18,11 @@ import type {
   TimeBox,
   TonightPlan,
 } from "../types.ts";
+import type { Domain } from "./subjects.ts";
+import type { VideoType } from "./videoTypes.ts";
+import { GAMING_LIBRARY } from "./libraryGaming.ts";
+
+export type Setup = "none" | "install" | "mods" | "hardware";
 
 export interface IdeaSeed {
   key: string;
@@ -45,10 +50,26 @@ export interface IdeaSeed {
   series?: boolean;
   originality?: Originality;
   tonight?: TonightPlan;
-  variants?: { slot: string; values: string[] };
+  /**
+   * Variant slot. With `games: true` every value is a game title (resolved in
+   * the games catalog); `gamesFor` maps a value to the game(s) it involves
+   * when the value isn't itself a title (e.g. "Morrowind's alchemy").
+   */
+  variants?: { slot: string; values: string[]; games?: boolean; gamesFor?: Record<string, string[]> };
+  /** Content domain; derived from subjects when left out. */
+  domain?: Domain;
+  videoType?: VideoType;
+  /** A fixed game (catalog title) the idea is about. */
+  game?: string;
+  /** The idea uses games you already own (e.g. your backlog), so nothing needs buying. */
+  ownedByDefinition?: boolean;
+  /** How much setup stands between you and recording. */
+  setup?: Setup;
+  /** "game" = about playing it; "history" = research and history first. */
+  angle?: "game" | "history";
 }
 
-export const IDEA_LIBRARY: IdeaSeed[] = [
+const RAW_GENERAL: IdeaSeed[] = [
   // ------------------------------------------------------------ retro computing / old OS
   {
     key: "daily-driver-old-os",
@@ -497,171 +518,6 @@ export const IDEA_LIBRARY: IdeaSeed[] = [
       firstFive: "Create eliza.py and write a loop that echoes what you type.",
       minimumVideo: "A working bot with ten patterns and a two-minute conversation.",
       expansion: "Compare it side by side with the original transcript.",
-    },
-  },
-  // ------------------------------------------------------------ games (familiar territory, new angles)
-  {
-    key: "game-rule-twist",
-    title: "{game} but I follow one strange rule the whole time",
-    premise: "Play {game} under a single self-imposed rule you choose (pacifist, only one tool, never jump) and see how far it gets you.",
-    why: "This is close to formats you already made, so it is a comfortable way to restart without much planning.",
-    whatYouDo: "Choose the rule, record a full session, and keep only the moments where the rule actually matters.",
-    worthExploring: "Constraints reveal how games are designed and what players take for granted.",
-    audience: "Players of {game}; rule challenges are easy to understand from a title.",
-    requirements: ["{game}", "OBS", "Microphone"],
-    budgetUsd: 0,
-    budgetNote: "Free if you already own the game.",
-    effort: "small",
-    time: "afternoon",
-    energy: "medium",
-    recording: ["screen", "voiceover", "face"],
-    research: "light",
-    direction: ["lighthearted", "experimental"],
-    thumbnail: "Game screenshot with the rule written as a big crossed-out symbol.",
-    firstStep: "Write down three possible rules and pick the one you are most curious about.",
-    alternatives: ["Ask friends to choose the rule", "Escalate the rule each episode"],
-    subjects: ["video-games", "challenge-runs"],
-    series: true,
-    originality: "well-trodden",
-    variants: { slot: "game", values: ["Project Zomboid", "Minecraft", "a game I have never played", "an old PC game I own"] },
-    tonight: {
-      needs: ["The game installed", "OBS set up"],
-      firstFive: "Pick the rule, write it on a sticky note, start recording.",
-      minimumVideo: "One session, the best ten minutes, an honest ending.",
-      expansion: "Make it a three-part run with an escalating rule.",
-    },
-  },
-  {
-    key: "game-history-forgotten",
-    title: "The forgotten game that {claim}",
-    premise: "Research an obscure game connected to something bigger: {claim}. Play it and tell its story.",
-    why: "It moves your gaming background toward history and research instead of pure gameplay.",
-    whatYouDo: "Research with sources, play the game in an emulator or VM, and narrate over gameplay.",
-    worthExploring: "Obscure games often hold the origins of ideas that later became huge.",
-    audience: "Game history fans.",
-    requirements: ["Sources (interviews, magazines, archive pages)", "A legal way to play the game"],
-    budgetUsd: 10,
-    budgetNote: "Some old games cost a few dollars on GOG; many are free.",
-    effort: "medium",
-    time: "weekend",
-    energy: "medium",
-    recording: ["screen", "voiceover"],
-    research: "deep",
-    direction: ["informational", "curious"],
-    thumbnail: "The game's box art beside the famous game it influenced.",
-    firstStep: "Spend 30 minutes finding three games that fit the angle; pick the one with the best sources.",
-    alternatives: ["Focus on the developer's story", "Play it with a friend who has never heard of it"],
-    subjects: ["game-history", "obscure-history", "nostalgic-games"],
-    originality: "uncommon",
-    variants: {
-      slot: "claim",
-      values: [
-        "quietly invented a mechanic everyone uses now",
-        "was made by one person in a bedroom",
-        "came free on a cereal box or magazine disc",
-        "was cancelled and leaked years later",
-      ],
-    },
-  },
-  {
-    key: "first-time-classic",
-    title: "Playing {game} for the first time, decades late",
-    premise: "Play a famous older game you somehow never played, with no guides, and compare its reputation with your actual experience.",
-    why: "Echoes your first-time format but adds a nostalgia and game-history angle.",
-    whatYouDo: "Record your first sessions, note expectations beforehand, and give a fair verdict.",
-    worthExploring: "Reputations change; fresh eyes can notice what fans no longer see.",
-    audience: "Fans of the game, who often love watching newcomers.",
-    requirements: ["The game (legally purchased)", "OBS"],
-    budgetUsd: 20,
-    effort: "small",
-    time: "afternoon",
-    energy: "low",
-    recording: ["screen", "voiceover", "face"],
-    research: "light",
-    direction: ["lighthearted", "curious"],
-    thumbnail: "Your face next to the classic box art with a question mark.",
-    firstStep: "Write down what you believe the game is like before you start.",
-    alternatives: ["Let viewers pick the game", "Only play the first hour"],
-    subjects: ["nostalgic-games", "video-games", "game-history"],
-    series: true,
-    originality: "well-trodden",
-    variants: { slot: "game", values: ["Half-Life", "Deus Ex", "Morrowind", "System Shock 2", "Thief"] },
-  },
-  {
-    key: "weird-mods",
-    title: "Trying the strangest {game} mods I could find",
-    premise: "Search mod sites for the most unusual, specific or baffling mods for {game} and try each one.",
-    why: "Close to your old gaming content, but focused on weird discoveries and the people who make them.",
-    whatYouDo: "Curate mods, test them, and include a short note about who made each one and why.",
-    worthExploring: "Modding communities show how players reinterpret games.",
-    audience: "Players of {game} and modding fans.",
-    requirements: ["{game}", "Mods from reputable sites"],
-    budgetUsd: 0,
-    effort: "small",
-    time: "afternoon",
-    energy: "medium",
-    recording: ["screen", "voiceover"],
-    research: "light",
-    direction: ["unpredictable", "lighthearted"],
-    thumbnail: "The game's normal look vs the strangest mod, side by side.",
-    firstStep: "Sort the game's mod site by 'oldest' and browse page 20 onward.",
-    alternatives: ["Make your own small mod", "Interview a mod author by email"],
-    subjects: ["game-mods", "video-games", "strange-software"],
-    series: true,
-    originality: "well-trodden",
-    variants: { slot: "game", values: ["Project Zomboid", "Minecraft", "Skyrim", "Half-Life"] },
-  },
-  {
-    key: "horror-game-analysis",
-    title: "Why {game} is scary when nothing happens",
-    premise: "Play a horror game and break down exactly which sounds, spaces and pacing tricks make it work.",
-    why: "Builds on your horror game videos, but turns reactions into observation.",
-    whatYouDo: "Play, clip the moments that worked on you, and describe the techniques in your own words.",
-    worthExploring: "Fear in games is engineered; making it visible is interesting even to non-players.",
-    audience: "Horror game fans and design-curious viewers.",
-    requirements: ["The game", "OBS"],
-    budgetUsd: 20,
-    effort: "medium",
-    time: "day",
-    energy: "medium",
-    recording: ["screen", "voiceover"],
-    research: "moderate",
-    direction: ["curious", "informational"],
-    thumbnail: "An empty dark hallway with an arrow pointing at nothing.",
-    firstStep: "Play 30 minutes and write a timestamp every time you feel tense.",
-    alternatives: ["Compare three indie horror games", "Play with the sound off and on"],
-    subjects: ["horror-games", "video-games"],
-    originality: "uncommon",
-    variants: { slot: "game", values: ["Night Factory", "an indie horror game under $5", "a free horror game on itch.io"] },
-  },
-  {
-    key: "itch-io-roulette",
-    title: "Playing random free games until I find a good one",
-    premise: "Use itch.io's random/browse features to play free games one after another until you find one you genuinely love.",
-    why: "Zero budget, unpredictable, and you can start in minutes.",
-    whatYouDo: "Play each game for up to five minutes, keep a scorecard, and end on the winner.",
-    worthExploring: "Small independent developers make some of the most original games; this shines a light on them.",
-    audience: "Indie game fans; developers often share videos about their games.",
-    requirements: ["itch.io", "OBS"],
-    budgetUsd: 0,
-    effort: "tiny",
-    time: "1h",
-    energy: "low",
-    recording: ["screen", "voiceover"],
-    format: "either",
-    research: "light",
-    direction: ["unpredictable", "lighthearted"],
-    thumbnail: "A grid of tiny game screenshots with one circled.",
-    firstStep: "Open itch.io's free games sorted by 'most recent' and start recording.",
-    alternatives: ["Only horror", "Only games made in 48-hour game jams"],
-    subjects: ["video-games", "game-dev-tools"],
-    series: true,
-    originality: "well-trodden",
-    tonight: {
-      needs: ["Internet", "OBS"],
-      firstFive: "Open itch.io, filter free games, start the recorder.",
-      minimumVideo: "Eight games, short scorecard, one winner.",
-      expansion: "Contact the winning developer.",
     },
   },
   // ------------------------------------------------------------ early internet / y2k / memes
@@ -1340,3 +1196,15 @@ export const IDEA_LIBRARY: IdeaSeed[] = [
     originality: "uncommon",
   },
 ];
+
+// The general library predates Content Focus. Its ideas count as "other"
+// (outside the gaming niche) except the few that are really about games.
+const RETAG: Record<string, Partial<IdeaSeed>> = {
+  "flash-preservation": { domain: "gaming", videoType: "revisit" },
+  "speedrun-learning": { domain: "gaming", videoType: "challenge" },
+};
+
+export const GENERAL_LIBRARY: IdeaSeed[] = RAW_GENERAL.map((s) => ({ domain: "other", videoType: "general", ...s, ...(RETAG[s.key] ?? {}) }));
+
+/** Everything the Idea Machine can suggest: the gaming library first, then the general one (only used when Content Focus allows it). */
+export const IDEA_LIBRARY: IdeaSeed[] = [...GAMING_LIBRARY, ...GENERAL_LIBRARY];

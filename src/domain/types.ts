@@ -4,6 +4,7 @@
 
 export const PROFILE_KINDS = [
   "favorite_subject",
+  "favorite_game",
   "current_interest",
   "tired_of",
   "format_enjoyed",
@@ -17,12 +18,20 @@ export const PROFILE_KINDS = [
 ] as const;
 export type ProfileKind = (typeof PROFILE_KINDS)[number];
 export type Durability = "enduring" | "temporary";
+/**
+ * Which recommendations a profile entry influences:
+ * channel = things you want to make videos about (used by the Idea Machine),
+ * personal = things you enjoy in life, watching = things you like to watch.
+ * Personal and watching entries are remembered but never steer ideas.
+ */
+export type ProfileScope = "channel" | "personal" | "watching";
 
 export interface ProfileItem {
   id: string;
   kind: ProfileKind;
   value: string;
   durability: Durability;
+  scope: ProfileScope;
   note: string;
   createdAt: string;
   updatedAt: string;
@@ -54,6 +63,8 @@ export interface Video {
   userFormat: string;
   userEffort: number | null;
   userNotes: string;
+  /** Subject IDs you assigned yourself; when set they replace the automatic topics. */
+  userSubjects: string[];
   relatedProjectId: string | null;
   createdAt: string;
   updatedAt: string;
@@ -135,6 +146,12 @@ export interface IdeaDetails {
   tonight: TonightPlan | null;
   /** Why the generator surfaced it (filled at generation time). */
   reasons: string[];
+  /** Since v0.1.1: what kind of video, which content domain and which games. */
+  videoType?: string;
+  domain?: string;
+  games?: string[];
+  /** Ownership/price status at the time the idea was generated, in words. */
+  access?: string;
 }
 
 export type IdeaStatus = "inbox" | "saved" | "maybe" | "rejected" | "started" | "done";
@@ -164,14 +181,29 @@ export const REACTIONS = [
   { id: "too_similar", label: "Too similar" },
   { id: "not_in_mood", label: "Not in the mood" },
   { id: "already_done", label: "Already done" },
+  { id: "like_game", label: "I like this game" },
+  { id: "like_format", label: "I like this kind of video" },
+  { id: "like_topic", label: "Like the topic, not this take on it" },
+  { id: "more_like", label: "More like this" },
+  { id: "less_like", label: "Less like this" },
+  { id: "not_this_type", label: "I don't want this type of video" },
 ] as const;
 export type Reaction = (typeof REACTIONS)[number]["id"];
+
+/** What the reaction was about, recorded with it so the right thing is learned. */
+export interface FeedbackDetail {
+  seedKey?: string;
+  videoType?: string;
+  games?: string[];
+  domain?: string;
+}
 
 export interface IdeaFeedback {
   id: string;
   ideaKey: string;
   reaction: Reaction;
   subjects: string[];
+  detail: FeedbackDetail;
   createdAt: string;
 }
 

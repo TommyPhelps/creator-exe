@@ -25,7 +25,7 @@ const REC = [
 ] as const;
 
 export function Tonight() {
-  const { db, toast } = useApp();
+  const { db, toast, settings } = useApp();
   const actions = useIdeaActions();
   const [time, setTime] = useState<TimeBox | null>(null);
   const [energy, setEnergy] = useState<Energy | null>(null);
@@ -41,7 +41,7 @@ export function Tonight() {
     setBusy(true);
     (async () => {
       const ctx = await loadCreatorContext(db);
-      const r = generateIdeas({ mode: "tonight", time, energy, recording: rec }, ctx, { count: 3 });
+      const r = generateIdeas({ mode: "tonight", time, energy, recording: rec }, ctx, { count: 3, focus: settings.contentFocus });
       if (!alive) return;
       setIdeas(r.ideas);
       setNotes([...r.notes, ...(r.relaxed.length ? [`Loosened: ${r.relaxed.join(", ")}, to find three options.`] : [])]);
@@ -53,7 +53,7 @@ export function Tonight() {
     return () => {
       alive = false;
     };
-  }, [db, toast, time, energy, rec, seed]);
+  }, [db, toast, time, energy, rec, seed, settings.contentFocus]);
 
   const visible = ideas.filter((i) => !dismissed.has(i.key));
 
@@ -62,7 +62,7 @@ export function Tonight() {
       <PageHead
         sys="TONIGHT.EXE :: CREATIVE JUICE DETECTED"
         title="Make something tonight"
-        lede="Three small ideas you can start right now. Everything below is optional; pick one and press START THIS VIDEO to get a ready-made project."
+        lede="Three small gaming ideas you can start right now, with games you have or that are free. Pick one and press START THIS VIDEO to get a ready-made project."
         actions={
           <Button icon="dice" onClick={() => setSeed((s) => s + 1)} disabled={busy}>
             Three different ideas
@@ -80,7 +80,7 @@ export function Tonight() {
       {notes.map((n) => (
         <Note key={n}>{n}</Note>
       ))}
-      <div className="grid cols-3">
+      <div className="ideas-grid">
         {visible.map((g) => (
           <IdeaCard
             key={g.key}

@@ -84,7 +84,7 @@ export function ControlRoom() {
     let alive = true;
     (async () => {
       const ctx = await loadCreatorContext(db);
-      const r = generateIdeas({ ...settings.generator, mode: "standard" }, ctx, { count: 3 });
+      const r = generateIdeas({ ...settings.generator, mode: "standard" }, ctx, { count: 3, focus: settings.contentFocus });
       if (!alive) return;
       setIdeas(r.ideas);
       await recordImpressions(db, r.ideas.map((i) => i.key));
@@ -176,7 +176,7 @@ export function ControlRoom() {
         }
       >
         {ideaError ? <Note kind="err">{ideaError}</Note> : null}
-        <div className="grid cols-3">
+        <div className="ideas-grid">
           {ideas.map((g) => (
             <IdeaCard key={g.key} idea={g} compact onStart={() => void ideaActions.start(g)} onSave={() => void ideaActions.save(g)} onReact={(r) => void ideaActions.react(g, r)} />
           ))}

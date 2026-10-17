@@ -1,33 +1,42 @@
-import { useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { useAction, useApp, useData } from "../app/context.tsx";
 import { createProject, deleteIdea, listIdeas, recordIdeaFeedback, recordImpressions, setIdeaStatus, updateIdea } from "../db/repos.ts";
-import { generateIdeas, TIME_LABEL, type GenerationResult, type GeneratorControls, type GenMode, type InterestMode } from "../domain/ideas/generator.ts";
+import { generateIdeas, TIME_LABEL, type GeneratedIdea, type GenerationResult, type GeneratorControls, type GenMode, type InterestMode } from "../domain/ideas/generator.ts";
+import { FOCUS_PRESETS, normalizeFocus, presetFocus, type FocusPresetId } from "../domain/ideas/focus.ts";
 import { loadCreatorContext } from "../domain/ideas/context.ts";
-import { subjectLabel } from "../domain/ideas/subjects.ts";
+import { GAMING_SUBJECTS, GAMING_TECH_SUBJECTS, subjectLabel } from "../domain/ideas/subjects.ts";
 import { projectFromIdea } from "../domain/projects.ts";
 import type { Idea, IdeaStatus } from "../domain/types.ts";
 import { Button, Chip, Empty, Field, Note, PageHead, Segmented, Tabs, TextArea, TextInput, Win } from "../ui/kit.tsx";
 import { IdeaCard, useIdeaActions } from "./ideaActions.tsx";
 
 const MODES: { id: GenMode; label: string; hint: string }[] = [
-  { id: "standard", label: "Balanced", hint: "A mix based on your controls and profile." },
-  { id: "tonight", label: "Tonight", hint: "Small enough to start right now." },
-  { id: "zero-budget", label: "Zero budget", hint: "Nothing to buy." },
+  { id: "standard", label: "Balanced", hint: "A mix based on your controls, Content Focus and profile." },
+  { id: "tonight", label: "Tonight", hint: "Small enough to start right now, with games you can actually play tonight." },
+  { id: "zero-budget", label: "Zero budget", hint: "Nothing to buy: free games, games in your library, or no game at all." },
   { id: "deep-dive", label: "Deep dive", hint: "Substantial, research-heavy projects." },
   { id: "one-off", label: "One-off", hint: "Self-contained videos." },
   { id: "series", label: "Series", hint: "Could become a recurring format." },
-  { id: "curiosity", label: "Curiosity", hint: "Steered by what you type below." },
-  { id: "random", label: "Random", hint: "Unexpected picks to break habits." },
+  { id: "curiosity", label: "Curiosity", hint: "Steered by what you type below (inside your Content Focus)." },
+  { id: "random", label: "Random", hint: "Unexpected picks to break habits, still inside your Content Focus." },
 ];
-const INTEREST: { id: InterestMode; label: string }[] = [
-  { id: "familiar", label: "Familiar" },
-  { id: "adjacent", label: "Adjacent" },
-  { id: "new", label: "Completely new" },
-  { id: "surprise", label: "Surprise me" },
+const INTEREST: { id: InterestMode; label: string; hint: string }[] = [
+  { id: "familiar", label: "Familiar", hint: "Games and genres you know and like." },
+  { id: "adjacent", label: "Adjacent", hint: "Games, genres and formats next door to your interests." },
+  { id: "new", label: "Completely new", hint: "Unfamiliar games, obscure corners of gaming, new approaches." },
+  { id: "surprise", label: "Surprise me", hint: "Unexpected, but still within your Content Focus." },
 ];
 
 type Opt<T extends string> = { id: T; label: string }[];
 const CONTROLS: { key: keyof GeneratorControls; label: string; options: Opt<string> }[] = [
+  { key: "familiarity", label: "Games", options: [{ id: "known", label: "Ones I know" }, { id: "unfamiliar", label: "Ones I don't know" }] },
+  { key: "access", label: "Game cost", options: [{ id: "free", label: "Free games only" }, { id: "owned", label: "Owned or free" }, { id: "buy", label: "Willing to buy" }] },
+  { key: "era", label: "Era", options: [{ id: "retro", label: "Retro (before 2008)" }, { id: "modern", label: "Modern" }] },
+  { key: "angle", label: "Focus", options: [{ id: "game", label: "The game itself" }, { id: "history", label: "History & research" }] },
+  { key: "style", label: "Video style", options: [{ id: "gameplay", label: "Gameplay" }, { id: "commentary", label: "Commentary / retrospective" }] },
+  { key: "shape", label: "Shape", options: [{ id: "one-off", label: "One-off" }, { id: "series", label: "Could be a series" }] },
+  { key: "format", label: "Format", options: [{ id: "long", label: "Long-form" }, { id: "short", label: "Shorts" }, { id: "either", label: "Either" }] },
+  { key: "size", label: "Effort", options: [{ id: "tiny", label: "Tiny" }, { id: "small", label: "Small" }, { id: "medium", label: "Medium" }, { id: "ambitious", label: "Ambitious" }] },
   { key: "energy", label: "Energy", options: [{ id: "low", label: "Low" }, { id: "medium", label: "Medium" }, { id: "high", label: "High" }] },
   {
     key: "time",
@@ -43,7 +52,7 @@ const CONTROLS: { key: keyof GeneratorControls; label: string; options: Opt<stri
   },
   {
     key: "recording",
-    label: "Recording style",
+    label: "Recording",
     options: [
       { id: "screen", label: "Screen" },
       { id: "voiceover", label: "Voiceover" },
@@ -53,9 +62,6 @@ const CONTROLS: { key: keyof GeneratorControls; label: string; options: Opt<stri
       { id: "anything", label: "Anything" },
     ],
   },
-  { key: "size", label: "Project size", options: [{ id: "tiny", label: "Tiny" }, { id: "small", label: "Small" }, { id: "medium", label: "Medium" }, { id: "ambitious", label: "Ambitious" }] },
-  { key: "format", label: "Format", options: [{ id: "long", label: "Long-form" }, { id: "short", label: "Shorts" }, { id: "either", label: "Either" }] },
-  { key: "collab", label: "Collaboration", options: [{ id: "solo", label: "Solo" }, { id: "friends", label: "With friends" }, { id: "either", label: "Either" }] },
   { key: "research", label: "Research depth", options: [{ id: "light", label: "Light" }, { id: "moderate", label: "Moderate" }, { id: "deep", label: "Deep" }] },
   {
     key: "direction",
@@ -69,11 +75,66 @@ const CONTROLS: { key: keyof GeneratorControls; label: string; options: Opt<stri
     ],
   },
 ];
-const BUDGETS = [
-  { id: "0", label: "Free" },
-  { id: "20", label: "Under $20" },
-  { id: "50", label: "Under $50" },
-];
+
+/** Content Focus editor: presets plus exact percentages. Saved to settings; enforced by the generator. */
+export function ContentFocusPanel() {
+  const { settings, updateSettings } = useApp();
+  const f = settings.contentFocus;
+  const [draft, setDraft] = useState({ gaming: String(f.gaming), tech: String(f.tech), other: String(f.other) });
+  useEffect(() => setDraft({ gaming: String(f.gaming), tech: String(f.tech), other: String(f.other) }), [f.gaming, f.tech, f.other]);
+  const commit = (patch: Partial<typeof draft>) => {
+    const next = { ...draft, ...patch };
+    setDraft(next);
+    void updateSettings({ contentFocus: normalizeFocus({ gaming: Number(next.gaming) || 0, tech: Number(next.tech) || 0, other: Number(next.other) || 0 }) });
+  };
+  const preset = FOCUS_PRESETS.find((p) => p.id === f.preset);
+  return (
+    <Win title="CONTENT FOCUS" icon="control" meta={preset ? preset.label : "Custom"}>
+      <div className="stack">
+        <Segmented<FocusPresetId> value={f.preset === "custom" ? null : f.preset} options={FOCUS_PRESETS} onChange={(v) => v && void updateSettings({ contentFocus: presetFocus(v) })} label="Content focus preset" />
+        <div className="focus-bar">
+          <span className="mix" aria-hidden="true">
+            <i className="g" style={{ width: `${f.gaming}%` }} />
+            <i className="t" style={{ width: `${f.tech}%` }} />
+            <i className="o" style={{ width: `${f.other}%` }} />
+          </span>
+          <span className="focus-nums">
+            {(
+              [
+                ["gaming", "Gaming"],
+                ["tech", "Gaming-adjacent tech"],
+                ["other", "Outside gaming"],
+              ] as const
+            ).map(([k, label]) => (
+              <label key={k} className="row nowrap">
+                <span className="dim">{label}</span>
+                <input className="input" style={{ width: 72, flex: "none" }} inputMode="numeric" value={draft[k]} onChange={(e) => setDraft({ ...draft, [k]: e.target.value.replace(/[^0-9]/g, "") })} onBlur={() => commit({})} onKeyDown={(e) => e.key === "Enter" && commit({})} aria-label={`${label} percent`} />
+                <span className="dim">%</span>
+              </label>
+            ))}
+          </span>
+        </div>
+        <p className="dim small">
+          {preset?.hint ?? "Your own mix."} Shares are met over several batches, not inside each one. A domain at 0% is never suggested
+          {f.other === 0 ? "; use Explore outside my niche when you want something unrelated." : "."}
+        </p>
+      </div>
+    </Win>
+  );
+}
+
+function GenreChips({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) {
+  const toggle = (id: string) => onChange(value.includes(id) ? value.filter((x) => x !== id) : [...value, id]);
+  return (
+    <div className="toggle-chips" role="group" aria-label="Genres">
+      {[...GAMING_SUBJECTS, ...GAMING_TECH_SUBJECTS].map((s) => (
+        <button key={s.id} type="button" className={value.includes(s.id) ? "on" : ""} aria-pressed={value.includes(s.id)} onClick={() => toggle(s.id)}>
+          {s.label}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 function Generate() {
   const { db, settings, updateSettings, toast } = useApp();
@@ -81,24 +142,33 @@ function Generate() {
   const [controls, setControls] = useState<GeneratorControls>({ ...settings.generator });
   const [count, setCount] = useState(3);
   const [result, setResult] = useState<GenerationResult | null>(null);
+  const [likeOf, setLikeOf] = useState<GeneratedIdea | null>(null);
   const [busy, setBusy] = useState(false);
   const [more, setMore] = useState(false);
   const [customBudget, setCustomBudget] = useState("");
+  const [inspiration, setInspiration] = useState((settings.generator.inspiration ?? []).join(", "));
 
   const set = (patch: Partial<GeneratorControls>) => {
     const next = { ...controls, ...patch };
     setControls(next);
     const remember: GeneratorControls = { ...next };
     delete remember.curiosity;
+    delete remember.explore;
     void updateSettings({ generator: remember });
   };
 
-  const run = async (override?: Partial<GeneratorControls>) => {
+  const run = async (override?: Partial<GeneratorControls>, like?: GeneratedIdea) => {
     setBusy(true);
     try {
       const ctx = await loadCreatorContext(db);
-      const r = generateIdeas({ ...controls, ...override }, ctx, { count });
+      const insp = inspiration.split(/[,;\n]/).map((x) => x.trim()).filter(Boolean);
+      const r = generateIdeas({ ...controls, inspiration: insp, ...override }, ctx, {
+        count,
+        focus: settings.contentFocus,
+        likeThis: like ? { key: like.key, seedKey: like.seedKey, videoType: like.videoType, subjects: like.subjects, games: like.games } : null,
+      });
       setResult(r);
+      setLikeOf(like ?? null);
       await recordImpressions(db, r.ideas.map((i) => i.key));
     } catch (e) {
       toast("ERROR", e instanceof Error ? e.message : String(e), "err");
@@ -109,67 +179,72 @@ function Generate() {
 
   const mode = controls.mode ?? "standard";
   const budgetValue = controls.budgetUsd === null || controls.budgetUsd === undefined ? null : String(controls.budgetUsd);
+  const active = CONTROLS.filter((c) => controls[c.key]).length + (controls.genres?.length ? 1 : 0) + (budgetValue !== null ? 1 : 0);
 
   return (
     <div className="stack">
-      <Win title="IDEA MACHINE CONTROLS" icon="settings">
+      <ContentFocusPanel />
+      <Win title="IDEA MACHINE CONTROLS" icon="settings" meta={active ? `${active} filter${active > 1 ? "s" : ""} on` : "no filters"}>
         <div className="stack">
-          <div className="row">
-            <span className="label" style={{ width: 120 }}>
-              Mode
-            </span>
-            <Segmented value={mode} options={MODES} onChange={(v) => set({ mode: v ?? "standard" })} label="Generation mode" />
-          </div>
-          <p className="dim small" style={{ marginLeft: 130 }}>
-            {MODES.find((m) => m.id === mode)?.hint}
-          </p>
-          <div className="row">
-            <span className="label" style={{ width: 120 }}>
-              Interest
-            </span>
-            <Segmented value={controls.interest ?? null} options={INTEREST} onChange={(v) => set({ interest: v })} allowNone label="Interest" />
-          </div>
-          <div className="row nowrap">
-            <span className="label" style={{ width: 120 }}>
-              Curious about
-            </span>
+          <div className="ctl-grid">
+            <span className="label">Mode</span>
+            <div className="stack tight">
+              <Segmented value={mode} options={MODES} onChange={(v) => set({ mode: v ?? "standard" })} label="Generation mode" />
+              <span className="dim small">{MODES.find((m) => m.id === mode)?.hint}</span>
+            </div>
+            <span className="label">Interest</span>
+            <div className="stack tight">
+              <Segmented value={controls.interest ?? null} options={INTEREST} onChange={(v) => set({ interest: v })} allowNone label="Interest" />
+              {controls.interest ? <span className="dim small">{INTEREST.find((i) => i.id === controls.interest)?.hint}</span> : null}
+            </div>
+            <span className="label">Inspired by games</span>
             <input
-              className="input grow"
+              className="input"
+              value={inspiration}
+              placeholder="optional: e.g. Elden Ring, Thief, Minecraft modpacks"
+              onChange={(e) => setInspiration(e.target.value)}
+              onBlur={() => set({ inspiration: inspiration.split(/[,;\n]/).map((x) => x.trim()).filter(Boolean) })}
+              onKeyDown={(e) => e.key === "Enter" && void run()}
+              aria-label="Games to use as inspiration"
+            />
+            <span className="label">Curious about</span>
+            <input
+              className="input"
               value={controls.curiosity ?? ""}
-              placeholder="optional: anything on your mind, e.g. old phones, cooking, Linux on weird hardware"
+              placeholder="optional: anything on your mind, e.g. game preservation, immersive sims"
               onChange={(e) => setControls({ ...controls, curiosity: e.target.value })}
               onKeyDown={(e) => e.key === "Enter" && void run()}
+              aria-label="Curious about"
             />
-          </div>
-          {more ? (
-            <div className="stack">
-              {CONTROLS.map((c) => (
-                <div key={c.key} className="row">
-                  <span className="label" style={{ width: 120 }}>
-                    {c.label}
-                  </span>
-                  <Segmented value={(controls[c.key] as string | null | undefined) ?? null} options={c.options} onChange={(v) => set({ [c.key]: v } as Partial<GeneratorControls>)} allowNone label={c.label} />
+            {more ? (
+              <>
+                <span className="label">Genre</span>
+                <GenreChips value={controls.genres ?? []} onChange={(v) => set({ genres: v.length ? v : null })} />
+                {CONTROLS.map((c) => (
+                  <Fragment key={c.key}>
+                    <span className="label">{c.label}</span>
+                    <Segmented value={(controls[c.key] as string | null | undefined) ?? null} options={c.options} onChange={(v) => set({ [c.key]: v } as Partial<GeneratorControls>)} allowNone label={c.label} />
+                  </Fragment>
+                ))}
+                <span className="label">Extra budget</span>
+                <div className="row">
+                  <Segmented value={["0", "20", "50"].includes(budgetValue ?? "") ? budgetValue : null} options={[{ id: "0", label: "Nothing" }, { id: "20", label: "Under $20" }, { id: "50", label: "Under $50" }]} onChange={(v) => set({ budgetUsd: v === null ? null : Number(v) })} allowNone label="Budget" />
+                  <input
+                    className="input"
+                    style={{ width: 110 }}
+                    placeholder="Custom $"
+                    inputMode="numeric"
+                    value={customBudget}
+                    onChange={(e) => setCustomBudget(e.target.value.replace(/[^0-9]/g, ""))}
+                    onBlur={() => customBudget && set({ budgetUsd: Number(customBudget) })}
+                    aria-label="Custom budget in dollars"
+                  />
+                  <span className="dim small">Equipment and software, not the game (see Game cost).</span>
                 </div>
-              ))}
-              <div className="row">
-                <span className="label" style={{ width: 120 }}>
-                  Budget
-                </span>
-                <Segmented value={BUDGETS.some((b) => b.id === budgetValue) ? budgetValue : null} options={BUDGETS} onChange={(v) => set({ budgetUsd: v === null ? null : Number(v) })} allowNone label="Budget" />
-                <input
-                  className="input"
-                  style={{ width: 110 }}
-                  placeholder="Custom $"
-                  inputMode="numeric"
-                  value={customBudget}
-                  onChange={(e) => setCustomBudget(e.target.value.replace(/[^0-9]/g, ""))}
-                  onBlur={() => customBudget && set({ budgetUsd: Number(customBudget) })}
-                  aria-label="Custom budget in dollars"
-                />
-              </div>
-              <p className="dim small">Nothing here is required. Click a selected option again to clear it. Choices are remembered.</p>
-            </div>
-          ) : null}
+              </>
+            ) : null}
+          </div>
+          {more ? <p className="dim small">Nothing here is required. Click a selected option again to clear it. Choices are remembered. If too few ideas match, the least important filters are loosened first and you're told which.</p> : null}
           <div className="row">
             <Button variant="primary" size="big" icon="ideas" onClick={() => void run()} disabled={busy}>
               {busy ? "GENERATING..." : "GENERATE IDEAS"}
@@ -177,8 +252,11 @@ function Generate() {
             <Button icon="dice" onClick={() => void run({ mode: "random" })} disabled={busy}>
               NO IDEAS? INITIATE RANDOMIZER
             </Button>
+            <Button icon="globe" onClick={() => void run({ explore: true })} disabled={busy} title="One batch that deliberately includes subjects outside gaming">
+              Explore outside my niche
+            </Button>
             <Button variant="flat" onClick={() => setMore(!more)}>
-              {more ? "Fewer controls" : "More controls"}
+              {more ? "Fewer controls" : `More controls${active ? ` (${active})` : ""}`}
             </Button>
             <span className="right row">
               <span className="label">How many</span>
@@ -190,28 +268,43 @@ function Generate() {
 
       {result ? (
         <>
+          {likeOf ? (
+            <div className="row">
+              <Note>
+                More like <b>{likeOf.title}</b>: same kind of video or topic, different game or concept.
+              </Note>
+              <Button size="small" onClick={() => void run()}>
+                Back to normal ideas
+              </Button>
+            </div>
+          ) : null}
           {result.notes.map((n) => (
-            <Note key={n} kind="warn">
+            <div key={n} className={/outside|Exploring/i.test(n) ? "explore-banner" : "note"}>
               {n}
-            </Note>
+            </div>
           ))}
           {result.relaxed.length ? <Note>To find enough ideas, these preferences were loosened: {result.relaxed.join(", ")}.</Note> : null}
-          <div className="grid cols-3">
+          <div className="ideas-grid">
             {result.ideas.map((g) => (
               <IdeaCard
                 key={g.key}
                 idea={g}
                 onStart={() => void actions.start(g)}
                 onSave={() => void actions.save(g)}
+                onMoreLike={() => {
+                  void actions.react(g, "more_like");
+                  void run(undefined, g);
+                }}
                 onReact={(r) => {
                   void actions.react(g, r);
-                  setResult((cur) => (cur ? { ...cur, ideas: cur.ideas.filter((x) => x.key !== g.key || r === "love" || r === "save" || r === "maybe") } : cur));
+                  if (r === "more_like") void run(undefined, g);
+                  setResult((cur) => (cur ? { ...cur, ideas: cur.ideas.filter((x) => x.key !== g.key || ["love", "save", "maybe", "like_game", "like_format", "more_like"].includes(r)) } : cur));
                 }}
               />
             ))}
           </div>
           <p className="dim small">
-            Ratings are rough estimates, not predictions. Enjoyment shows "unknown" until you add favorite subjects, rate past videos or react to ideas. {result.poolSize} concepts matched your limits.
+            Ratings are rough estimates, not predictions. Ownership comes only from the library you imported; prices and covers come from the Steam store with the date checked. {result.poolSize} concepts matched your limits.
           </p>
         </>
       ) : (
@@ -438,7 +531,7 @@ export function IdeaMachine() {
   const [compareIds, setCompareIds] = useState<string[]>([]);
   return (
     <div className="page">
-      <PageHead sys="IDEA MACHINE :: NEW IDEA INCOMING" title="Find something worth making" lede="Concepts, not title formulas. Every suggestion explains why it showed up, and your reactions shape the next batch without locking you into one niche." />
+      <PageHead sys="IDEA MACHINE :: NEW IDEA INCOMING" title="Find something worth making" lede="Gaming first: your Content Focus decides what shows up. Every suggestion explains why, and your reactions shape the next batch without locking you into one game or genre." />
       <Tabs
         value={tab}
         tabs={[

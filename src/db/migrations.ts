@@ -172,6 +172,42 @@ export const MIGRATIONS: Migration[] = [
       )`,
     ],
   },
+  {
+    version: 2,
+    name: "content focus, game library, feedback detail, topic overrides",
+    statements: [
+      `ALTER TABLE profile_items ADD COLUMN scope TEXT NOT NULL DEFAULT 'channel'`,
+      `ALTER TABLE videos ADD COLUMN user_subjects TEXT NOT NULL DEFAULT '[]'`,
+      `ALTER TABLE idea_feedback ADD COLUMN detail TEXT NOT NULL DEFAULT '{}'`,
+      `CREATE TABLE games (
+        canon TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        platform TEXT NOT NULL DEFAULT 'PC',
+        ownership TEXT NOT NULL DEFAULT 'unknown',
+        status TEXT,
+        rating INTEGER,
+        favorite INTEGER NOT NULL DEFAULT 0,
+        playtime_min INTEGER,
+        steam_app_id INTEGER,
+        release_year INTEGER,
+        tags TEXT NOT NULL DEFAULT '[]',
+        source TEXT NOT NULL,
+        imported_at TEXT NOT NULL
+      )`,
+      `CREATE TABLE game_info (
+        canon TEXT PRIMARY KEY,
+        query TEXT NOT NULL,
+        status TEXT NOT NULL,
+        steam_app_id INTEGER,
+        steam_name TEXT,
+        image_url TEXT,
+        is_free INTEGER,
+        price_text TEXT,
+        source TEXT NOT NULL,
+        checked_at TEXT NOT NULL
+      )`,
+    ],
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1]?.version ?? 0;
@@ -193,6 +229,8 @@ export const BACKUP_TABLES = [
   "thumbnails",
   "title_candidates",
   "packages",
+  "games",
+  "game_info",
 ] as const;
 
 export type BackupTable = (typeof BACKUP_TABLES)[number];

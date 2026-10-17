@@ -178,7 +178,7 @@ test("applying a merge can be cancelled between atomic chunks", async () => {
 
 test("channel reading labels come with evidence", () => {
   const now = new Date().toISOString();
-  const v = { id: "x", title: "Project Zomboid but I'm a Pacifist", description: "", publishedAt: "2021-06-01T00:00:00Z", durationSeconds: 813, thumbnailUrl: null, availability: "public" as const, firstSource: "manual" as const, lastSyncedAt: null, userCategory: "", userFormat: "", userEffort: null, userNotes: "", relatedProjectId: null, createdAt: now, updatedAt: now };
+  const v = { id: "x", title: "Project Zomboid but I'm a Pacifist", description: "", publishedAt: "2021-06-01T00:00:00Z", durationSeconds: 813, thumbnailUrl: null, availability: "public" as const, firstSource: "manual" as const, lastSyncedAt: null, userCategory: "", userFormat: "", userEffort: null, userNotes: "", userSubjects: [] as string[], relatedProjectId: null, createdAt: now, updatedAt: now };
   const r = readVideo(v);
   assert.ok(r.subjects.some((s) => s.id === "video-games" && s.because.includes("zomboid")));
   assert.ok(r.subjects.some((s) => s.id === "challenge-runs"));
