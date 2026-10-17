@@ -149,3 +149,24 @@ test("context loads from the database and idea -> project prefills the workshop"
   const c2 = await loadCreatorContext(db);
   assert.ok(c2.takenKeys.has(g.key), "started ideas are not suggested again");
 });
+
+test("brief seeding fills an empty profile once, never over existing entries, and makes enjoyment known", async () => {
+  const { seedProfileFromBrief, BRIEF_ENTRIES } = await import("../src/domain/brief.ts");
+  const db = memoryDb();
+  await migrate(db);
+  assert.equal(await seedProfileFromBrief(db), BRIEF_ENTRIES.length);
+  assert.equal(await seedProfileFromBrief(db), 0, "second run adds nothing");
+  const items = await repo.listProfile(db);
+  assert.equal(items.length, BRIEF_ENTRIES.length);
+  assert.ok(items.every((i) => i.note.includes("brief")), "every entry says where it came from");
+  for (const i of items.filter((x) => x.kind === "favorite_subject")) {
+    assert.ok(subjectsForText(i.value).length > 0, `"${i.value}" maps to at least one subject`);
+  }
+  const res = generateIdeas({}, await loadCreatorContext(db), { count: 6, rng: mulberry32(7) });
+  assert.ok(res.ideas.some((g) => g.ratings.enjoyment !== "unknown"), "seeded interests produce enjoyment estimates");
+
+  const other = memoryDb();
+  await migrate(other);
+  await repo.addProfileItem(other, "tired_of", "horror games");
+  assert.equal(await seedProfileFromBrief(other), 0, "a profile you already filled in is left alone");
+});

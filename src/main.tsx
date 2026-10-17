@@ -4,7 +4,8 @@ import "./styles/app.css";
 import { App } from "./app/App.tsx";
 import { loadPlatform } from "./platform/index.ts";
 import { migrate } from "./db/migrate.ts";
-import { loadSettings } from "./domain/settings.ts";
+import { loadSettings, saveSettings } from "./domain/settings.ts";
+import { seedProfileFromBrief } from "./domain/brief.ts";
 
 const rootEl = document.getElementById("root");
 if (!rootEl) throw new Error("missing #root");
@@ -46,9 +47,18 @@ async function boot() {
     show(`> DATABASE ............. ${info.dbPath ? "LOCAL" : "PREVIEW"}`);
     const report = await migrate(platform.db);
     show(`> SCHEMA ............... v${report.to}${report.applied.length ? ` (+${report.applied.length} migration${report.applied.length > 1 ? "s" : ""})` : ""}`);
-    const settings = await loadSettings(platform.db);
-    show("> SYSTEM ONLINE");
+    let settings = await loadSettings(platform.db);
     const notes = report.from > 0 && report.applied.length ? [`Database upgraded from schema v${report.from} to v${report.to}. Your data was kept.`] : [];
+    if (!settings.briefSeeded) {
+      const added = await seedProfileFromBrief(platform.db);
+      settings = { ...settings, briefSeeded: true };
+      await saveSettings(platform.db, settings);
+      if (added) {
+        show(`> CREATOR MEMORY ....... ${added} ENTRIES FROM YOUR BRIEF`);
+        notes.push(`Creator Memory starts with ${added} interests from your brief. Edit or delete them any time.`);
+      }
+    }
+    show("> SYSTEM ONLINE");
     root.render(
       <StrictMode>
         <App platform={platform} initialSettings={settings} appVersion={info.version} bootNotes={notes} />

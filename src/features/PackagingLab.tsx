@@ -397,6 +397,19 @@ export function PackagingLab({ projectId, tab: initialTab }: { projectId: string
       {!project ? (
         <Empty icon="packaging" title="Pick a project to package">
           Titles and packages belong to a project.
+          {projects && projects.length ? (
+            <div className="row" style={{ justifyContent: "center", marginTop: 10 }}>
+              {projects.slice(0, 6).map((p) => (
+                <Button key={p.id} icon="packaging" onClick={() => go({ section: "packaging", projectId: p.id, tab })}>
+                  {p.title}
+                </Button>
+              ))}
+            </div>
+          ) : (
+            <div className="row" style={{ justifyContent: "center", marginTop: 10 }}>
+              <Button onClick={() => go({ section: "tonight" })}>Start one from TONIGHT.EXE</Button>
+            </div>
+          )}
         </Empty>
       ) : (
         <>

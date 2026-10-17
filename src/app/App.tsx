@@ -224,7 +224,10 @@ export function App(props: { platform: Platform; initialSettings: AppSettings; a
     root.style.setProperty("zoom", String(settings.textScale));
   }, [settings.theme, settings.density, settings.textScale]);
 
+  const bootShown = useRef(false);
   useEffect(() => {
+    if (bootShown.current) return;
+    bootShown.current = true;
     for (const n of props.bootNotes) toast("SYSTEM", n);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

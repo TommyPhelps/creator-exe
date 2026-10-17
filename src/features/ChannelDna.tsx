@@ -1,8 +1,8 @@
 import { useMemo, useRef, useState } from "react";
 import { useAction, useApp, useData } from "../app/context.tsx";
 import { deleteAllChannelData, deleteVideo, listMetrics, listProjects, listVideoFeedback, listVideos, saveVideoFeedback, setManualMetric, updateVideoAnnotations } from "../db/repos.ts";
-import { feedUrl, parseChannelFeed } from "../domain/channel/feed.ts";
-import { importChannelViaApi } from "../domain/channel/dataApi.ts";
+import { channelPageUrl, extractChannelIdFromPage, feedUrl, parseChannelFeed } from "../domain/channel/feed.ts";
+import { importChannelViaApi, parseChannelInput } from "../domain/channel/dataApi.ts";
 import { parseStudioCsv } from "../domain/channel/studioCsv.ts";
 import { applyMerge, extractVideoId, planMerge, type MergePlan } from "../domain/channel/merge.ts";
 import { summarizeChannel } from "../domain/channel/analyze.ts";
@@ -69,6 +69,7 @@ function ImportPanel({ onPlan }: { onPlan: (plan: MergePlan, batch: ImportBatch)
   };
 
   const channelId = settings.channelInput.match(/UC[\w-]{22}/)?.[0] ?? "";
+  const handle = channelId ? undefined : parseChannelInput(settings.channelInput).handle;
 
   return (
     <Win title="IMPORT CHANNEL DATA" icon="import">
@@ -89,9 +90,21 @@ function ImportPanel({ onPlan }: { onPlan: (plan: MergePlan, batch: ImportBatch)
       {method === "feed" ? (
         <>
           <p className="small">Reads YouTube's public feed for your channel. Free and needs no account, but it only lists the 15 most recent public uploads, without video lengths.</p>
-          {!channelId ? <Note kind="warn">The public feed needs a channel ID starting with UC. Handles (@name) work with the Data API.</Note> : null}
-          <Button variant="primary" icon="import" disabled={busy || !channelId} onClick={() => void run(async (signal) => {
-            const res = await platform.http(feedUrl(channelId), { signal });
+          {!channelId && !handle ? <Note kind="warn">Enter a channel ID (starts with UC), a channel link, or an @handle.</Note> : null}
+          {handle ? <p className="dim small">{handle} will be looked up on its public channel page to find the channel ID first.</p> : null}
+          <Button variant="primary" icon="import" disabled={busy || (!channelId && !handle)} onClick={() => void run(async (signal) => {
+            let id = channelId;
+            if (!id && handle) {
+              setProgress({ done: 0, total: null, message: `Looking up ${handle}...` });
+              const page = await platform.http(channelPageUrl(handle), { signal });
+              if (!page.ok) throw new Error(page.status === 404 ? `YouTube has no channel called ${handle}.` : `YouTube returned HTTP ${page.status} for ${handle}.`);
+              const found = extractChannelIdFromPage(page.text);
+              if (!found) throw new Error(`Couldn't find the channel ID on ${handle}'s page. Paste the UC... ID instead (YouTube Studio > Settings > Channel > Advanced settings).`);
+              id = found;
+              await updateSettings({ channelInput: found });
+              toast("CHANNEL FOUND", `${handle} is ${found}. Saved for next time.`);
+            }
+            const res = await platform.http(feedUrl(id), { signal });
             if (!res.ok) throw new Error(res.status === 404 ? "YouTube has no public feed for that channel ID." : `YouTube returned HTTP ${res.status}.`);
             return parseChannelFeed(res.text);
           })}>

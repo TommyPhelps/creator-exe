@@ -584,7 +584,7 @@ export function Editor(props: EditorProps) {
               {safe ? (
                 <g pointerEvents="none">
                   <rect x={THUMB_W - 190} y={THUMB_H - 82} width={170} height={60} fill="rgba(0,0,0,.55)" stroke="#ffcc00" strokeDasharray="8 6" strokeWidth={2 / scale} />
-                  <text x={THUMB_W - 105} y={THUMB_H - 45} fill="#ffcc00" fontSize={22} textAnchor="middle" fontFamily="Tahoma">
+                  <text x={THUMB_W - 105} y={THUMB_H - 45} fill="#ffcc00" fontSize={22} textAnchor="middle" fontFamily="Tahoma, Segoe UI, sans-serif">
                     timestamp
                   </text>
                   <rect x={40} y={36} width={THUMB_W - 80} height={THUMB_H - 72} fill="none" stroke="#ffcc00" strokeOpacity={0.4} strokeDasharray="10 8" strokeWidth={1.5 / scale} />

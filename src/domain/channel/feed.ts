@@ -7,6 +7,31 @@ export function feedUrl(channelId: string): string {
   return `https://www.youtube.com/feeds/videos.xml?channel_id=${encodeURIComponent(channelId)}`;
 }
 
+/** The public channel page for an @handle (handle includes the @). */
+export function channelPageUrl(handle: string): string {
+  const h = handle.startsWith("@") ? handle : `@${handle}`;
+  return `https://www.youtube.com/${encodeURIComponent(h).replace(/^%40/, "@")}`;
+}
+
+/**
+ * Finds the channel's own UC... ID in its public channel page. Only markers
+ * that describe the page's channel are used (canonical link, RSS link, page
+ * metadata), never IDs of featured or linked channels elsewhere on the page.
+ */
+export function extractChannelIdFromPage(html: string): string | null {
+  const patterns = [
+    /<link[^>]+rel="canonical"[^>]+href="https:\/\/www\.youtube\.com\/channel\/(UC[\w-]{22})"/i,
+    /<link[^>]+type="application\/rss\+xml"[^>]+channel_id=(UC[\w-]{22})/i,
+    /<meta[^>]+itemprop="(?:identifier|channelId)"[^>]+content="(UC[\w-]{22})"/i,
+    /"externalId":"(UC[\w-]{22})"/,
+  ];
+  for (const p of patterns) {
+    const m = p.exec(html);
+    if (m?.[1]) return m[1];
+  }
+  return null;
+}
+
 export function parseChannelFeed(xml: string): ImportBatch {
   if (!/<feed[\s>]/i.test(xml)) throw new Error("The response was not a YouTube channel feed.");
   const channelTitle = tagText(xml.split(/<entry[\s>]/i)[0] ?? "", "title") ?? "";

@@ -25,6 +25,8 @@ export interface AppSettings {
   generator: GeneratorControls;
   navCollapsed: boolean;
   onboarded: boolean;
+  /** True once the starting profile from the brief was offered (never re-added after you delete it). */
+  briefSeeded: boolean;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -38,6 +40,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   generator: {},
   navCollapsed: false,
   onboarded: false,
+  briefSeeded: false,
 };
 
 export const SECRET_YOUTUBE_KEY = "youtube_api_key";

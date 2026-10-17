@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { memoryDb } from "./helpers/sqliteDb.ts";
 import { migrate } from "../src/db/migrate.ts";
 import * as repo from "../src/db/repos.ts";
-import { parseChannelFeed } from "../src/domain/channel/feed.ts";
+import { channelPageUrl, extractChannelIdFromPage, parseChannelFeed } from "../src/domain/channel/feed.ts";
 import { parseStudioCsv, parseClock } from "../src/domain/channel/studioCsv.ts";
 import { parseCsv, toCsv } from "../src/domain/channel/csv.ts";
 import { importChannelViaApi, parseIsoDuration, parseChannelInput, YouTubeApiError } from "../src/domain/channel/dataApi.ts";
@@ -189,4 +189,17 @@ test("channel reading labels come with evidence", () => {
   assert.equal(summary.byYear[0]?.year, "2021");
   const sat = satisfactionBySubject([v], [{ videoId: "x", flags: ["no_repeat", "exhausting"], enjoyOverall: 1, enjoyRecording: null, enjoyEditing: null, pride: null, effort: null, revisit: null, updatedAt: now }]);
   assert.ok((sat.get("survival-games") ?? 0) < 0);
+});
+
+test("resolves an @handle's own channel ID from its public page, ignoring featured channels", () => {
+  assert.equal(channelPageUrl("@TamsterCo"), "https://www.youtube.com/@TamsterCo");
+  assert.equal(channelPageUrl("TamsterCo"), "https://www.youtube.com/@TamsterCo");
+  const featuredFirst = `<script>var x = {"channelId":"UCaaaaaaaaaaaaaaaaaaaaaa"};</script>
+    <link rel="alternate" type="application/rss+xml" title="RSS" href="https://www.youtube.com/feeds/videos.xml?channel_id=UCGnpORs6LGRRb1b7y39wumw">`;
+  assert.equal(extractChannelIdFromPage(featuredFirst), "UCGnpORs6LGRRb1b7y39wumw");
+  const canonical = `<link rel="canonical" href="https://www.youtube.com/channel/UCGnpORs6LGRRb1b7y39wumw">`;
+  assert.equal(extractChannelIdFromPage(canonical), "UCGnpORs6LGRRb1b7y39wumw");
+  assert.equal(extractChannelIdFromPage(`{"externalId":"UCGnpORs6LGRRb1b7y39wumw"}`), "UCGnpORs6LGRRb1b7y39wumw");
+  assert.equal(extractChannelIdFromPage("<html>consent page</html>"), null);
+  assert.deepEqual(parseChannelInput("https://www.youtube.com/@TamsterCo"), { handle: "@TamsterCo" });
 });

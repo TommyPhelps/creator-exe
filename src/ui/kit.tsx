@@ -195,6 +195,13 @@ export function Tabs<T extends string>(p: { value: T; tabs: readonly { id: T; la
 
 export function LevelMeter({ value, label }: { value: LevelValue; label?: string }) {
   const n = value === "low" ? 1 : value === "medium" ? 2 : value === "high" ? 3 : 0;
+  if (value === "unknown") {
+    return (
+      <span className="level unknown" title={label ? `${label}: unknown until you rate videos or react to ideas` : "unknown"} aria-label={label ? `${label}: unknown` : "unknown"}>
+        ???
+      </span>
+    );
+  }
   return (
     <span className={`level ${value === "unknown" ? "unknown" : ""}`} title={label ? `${label}: ${value}` : value} aria-label={label ? `${label}: ${value}` : value}>
       {[1, 2, 3].map((i) => (

@@ -149,7 +149,7 @@ export function Projects() {
           <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />
           Show archive
         </label>
-        <span className="dim right">{projects.length} projects</span>
+        <span className="dim right">{projects.length} {projects.length === 1 ? "project" : "projects"}</span>
       </div>
 
       {!data ? null : projects.length === 0 && !query && !complexity ? (
