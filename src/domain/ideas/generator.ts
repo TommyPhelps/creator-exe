@@ -508,8 +508,8 @@ export function generateIdeas(
     const hasPreferred = preferred !== null && remaining.some(r => !usedSeeds.has(r.c.seed.key) && ideaDomain(r.c.seed.subjects) === preferred);
     for (let i = 0; i < remaining.length; i++) {
       const r = remaining[i];
-      if (hasPreferred && ideaDomain(r.c.seed.subjects) !== preferred) continue;
       if (!r || usedSeeds.has(r.c.seed.key)) continue;
+      if (hasPreferred && ideaDomain(r.c.seed.subjects) !== preferred) continue;
       const overlap = chosen.reduce((n, ch) => n + r.c.seed.subjects.filter((x) => ch.c.seed.subjects.includes(x)).length, 0);
       const val = r.score - overlap * 2.5;
       if (val > bestVal) {
