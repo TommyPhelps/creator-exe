@@ -25,7 +25,7 @@ const REC = [
 ] as const;
 
 export function Tonight() {
-  const { db, toast } = useApp();
+  const { db, toast, settings } = useApp();
   const actions = useIdeaActions();
   const [time, setTime] = useState<TimeBox | null>(null);
   const [energy, setEnergy] = useState<Energy | null>(null);
@@ -41,7 +41,7 @@ export function Tonight() {
     setBusy(true);
     (async () => {
       const ctx = await loadCreatorContext(db);
-      const r = generateIdeas({ mode: "tonight", time, energy, recording: rec }, ctx, { count: 3 });
+      const r = generateIdeas({ ...settings.generator, mode: "tonight", time, energy, recording: rec }, ctx, { count: 3 });
       if (!alive) return;
       setIdeas(r.ideas);
       setNotes([...r.notes, ...(r.relaxed.length ? [`Loosened: ${r.relaxed.join(", ")}, to find three options.`] : [])]);
@@ -53,7 +53,7 @@ export function Tonight() {
     return () => {
       alive = false;
     };
-  }, [db, toast, time, energy, rec, seed]);
+  }, [db, toast, time, energy, rec, seed, settings.generator]);
 
   const visible = ideas.filter((i) => !dismissed.has(i.key));
 

@@ -22,10 +22,12 @@ import { IDEA_LIBRARY, type IdeaSeed } from "./library.ts";
 import { adjacentTo, subjectLabel, subjectsForText } from "./subjects.ts";
 
 export type InterestMode = "familiar" | "adjacent" | "new" | "surprise";
+export type ContentFocus = "gaming-only" | "gaming-first" | "gaming-tech" | "variety" | "explore";
 export type GenMode = "standard" | "tonight" | "zero-budget" | "deep-dive" | "one-off" | "series" | "random" | "curiosity";
 
 export interface GeneratorControls {
   mode?: GenMode;
+  contentFocus?: ContentFocus;
   interest?: InterestMode | null;
   energy?: Energy | null;
   time?: TimeBox | null;
@@ -255,6 +257,21 @@ function blockedKeys(feedback: IdeaFeedback[], now: Date): Map<string, Reaction>
 const negative = (notes: string[]) =>
   notes.some((n) => /\b(no|not|never|avoid|don't|dont|rather not|uncomfortable|hate)\b/i.test(n));
 
+// A hard channel-topic boundary, distinct from personally enjoying a subject.
+const GAMING = new Set(["video-games","game-history","nostalgic-games","game-mods","survival-games","horror-games","challenge-runs"]);
+const TECH = new Set(["game-dev-tools","retro-computing","old-os","linux","strange-software","computer-history","tech-challenges"]);
+export type IdeaDomain = "gaming" | "gaming-tech" | "other";
+export function ideaDomain(subjects: string[]): IdeaDomain {
+  if (subjects.some(s => GAMING.has(s))) return "gaming";
+  if (subjects.some(s => TECH.has(s))) return "gaming-tech";
+  return "other";
+}
+export function allowedByFocus(subjects: string[], focus: ContentFocus): boolean {
+  const d = ideaDomain(subjects);
+  if (focus === "gaming-only") return d === "gaming";
+  if (focus === "gaming-first" || focus === "gaming-tech") return d !== "other";
+  return true;
+}
 // ------------------------------------------------------------ main entry point
 
 interface Scored {
@@ -273,6 +290,7 @@ export function generateIdeas(
   const rng = opts.rng ?? Math.random;
   const now = opts.now ?? new Date();
   const mode: GenMode = controls.mode ?? "standard";
+  const focus: ContentFocus = controls.contentFocus ?? "gaming-first";
   const all = expandLibrary(opts.library ?? IDEA_LIBRARY);
   const notes: string[] = [];
   const blocked = blockedKeys(ctx.feedback, now);
@@ -299,6 +317,7 @@ export function generateIdeas(
 
   const base = all.filter((c) => {
     const s = c.seed;
+    if (!allowedByFocus(c.seed.subjects, focus)) return false;
     if (ctx.takenKeys.has(c.key)) return false;
     if (blocked.has(c.key)) return false;
     if (budgetCap !== null && s.budgetUsd > budgetCap) return false;
@@ -474,13 +493,22 @@ export function generateIdeas(
   // Greedy diverse selection: never two variants of one concept, and
   // penalize subject overlap with ideas already chosen.
   const chosen: Scored[] = [];
+  // Distribute occasional tech across batches, not one out of every three.
+  const domains = new Map(all.map(c => [c.key, ideaDomain(c.seed.subjects)]));
+  const prev = ctx.impressions.filter(i => daysBetween(i.shownAt, now) <= 30 && domains.has(i.ideaKey));
+  let nGaming = prev.filter(i => domains.get(i.ideaKey) === "gaming").length;
+  let nTotal = prev.length;
   const usedSeeds = new Set<string>();
   const remaining = [...scored];
   while (chosen.length < count && remaining.length) {
     let bestIdx = -1;
     let bestVal = -Infinity;
+    const target = focus === "gaming-first" ? 0.85 : focus === "gaming-tech" ? 0.65 : null;
+    const preferred = target === null ? null : nGaming < Math.ceil((nTotal + 1) * target) ? "gaming" : "gaming-tech";
+    const hasPreferred = preferred !== null && remaining.some(r => !usedSeeds.has(r.c.seed.key) && ideaDomain(r.c.seed.subjects) === preferred);
     for (let i = 0; i < remaining.length; i++) {
       const r = remaining[i];
+      if (hasPreferred && ideaDomain(r.c.seed.subjects) !== preferred) continue;
       if (!r || usedSeeds.has(r.c.seed.key)) continue;
       const overlap = chosen.reduce((n, ch) => n + r.c.seed.subjects.filter((x) => ch.c.seed.subjects.includes(x)).length, 0);
       const val = r.score - overlap * 2.5;
@@ -494,6 +522,8 @@ export function generateIdeas(
     if (!pick) break;
     chosen.push(pick);
     usedSeeds.add(pick.c.seed.key);
+    if (ideaDomain(pick.c.seed.subjects) === "gaming") nGaming++;
+    nTotal++;
   }
 
   const ideas = chosen.map((p): GeneratedIdea => {
@@ -522,6 +552,6 @@ export function generateIdeas(
     };
   });
 
-  if (!ideas.length) notes.push("Nothing in the library fits those limits. Try a bigger budget or more time, or clear some filters.");
+  if (!ideas.length) notes.push("No ideas match these limits and your Content Focus. Try adjusting time or budget; the chosen channel focus is not silently ignored.");
   return { ideas, relaxed, notes, poolSize: pool.length };
 }

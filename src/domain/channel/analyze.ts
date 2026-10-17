@@ -39,7 +39,8 @@ export function readVideo(v: Video): VideoReading {
   const subjects: VideoReading["subjects"] = [];
   for (const rule of SUBJECT_RULES) {
     const titleHit = rule.terms.find((t) => t.re.test(title));
-    const hit = titleHit ?? rule.terms.find((t) => t.re.test(text));
+    // Generic boilerplate such as "TV" in descriptions is not credible film-topic evidence.
+    const hit = titleHit ?? (rule.id === "film-media" ? undefined : rule.terms.find((t) => t.re.test(text)));
     if (hit) subjects.push({ id: rule.id, label: subjectLabel(rule.id), because: `${titleHit ? "title" : "description"} contains "${hit.k}"` });
   }
   const formats: Evidence[] = [];

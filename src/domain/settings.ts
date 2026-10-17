@@ -19,6 +19,8 @@ export interface AppSettings {
   density: Density;
   textScale: number;
   channelInput: string;
+  /** Creator-owned branding; not silently replaced by YouTube metadata. */
+  channelIdentity: { displayName: string; description: string; avatarNote: string; bannerNote: string; visualStyle: string };
   projectRoot: string;
   folderTemplate: string[];
   editorPath: string;
@@ -34,10 +36,17 @@ export const DEFAULT_SETTINGS: AppSettings = {
   density: "comfortable",
   textScale: 1,
   channelInput: "UCGnpORs6LGRRb1b7y39wumw",
+  channelIdentity: {
+    displayName: "Tamster",
+    description: "Just a guy who likes games, old computers, and weird shit.\n\nI mostly do gaming videos with the occasional tech stuff thrown in.\n\nMy videos are never on schedule and always low quality :)",
+    avatarNote: "Gray meme cat with red laser eyes (user-made)",
+    bannerNote: "Pink-tinted retro collage: cats, vintage PC and Windows dialog box",
+    visualStyle: "Old YouTube / Y2K handmade gaming memes; not corporate or MrBeast-style",
+  },
   projectRoot: "",
   folderTemplate: ["Research", "Recordings", "Audio", "Images", "Thumbnails", "Assets", "Exports", "Notes"],
   editorPath: "",
-  generator: {},
+  generator: { contentFocus: "gaming-first" },
   navCollapsed: false,
   onboarded: false,
   briefSeeded: false,
@@ -47,7 +56,7 @@ export const SECRET_YOUTUBE_KEY = "youtube_api_key";
 
 export async function loadSettings(db: Db): Promise<AppSettings> {
   const stored = await getSetting<Partial<AppSettings>>(db, "app", {});
-  return { ...DEFAULT_SETTINGS, ...stored, generator: { ...(stored.generator ?? {}) } };
+  return { ...DEFAULT_SETTINGS, ...stored, channelIdentity: { ...DEFAULT_SETTINGS.channelIdentity, ...(stored.channelIdentity ?? {}) }, generator: { ...DEFAULT_SETTINGS.generator, ...(stored.generator ?? {}) } };
 }
 
 export async function saveSettings(db: Db, s: AppSettings): Promise<void> {

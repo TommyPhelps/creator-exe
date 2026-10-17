@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useAction, useApp, useData } from "../app/context.tsx";
 import { createProject, deleteIdea, listIdeas, recordIdeaFeedback, recordImpressions, setIdeaStatus, updateIdea } from "../db/repos.ts";
-import { generateIdeas, TIME_LABEL, type GenerationResult, type GeneratorControls, type GenMode, type InterestMode } from "../domain/ideas/generator.ts";
+import { generateIdeas, TIME_LABEL, type GenerationResult, type GeneratorControls, type GenMode, type InterestMode, type ContentFocus } from "../domain/ideas/generator.ts";
 import { loadCreatorContext } from "../domain/ideas/context.ts";
 import { subjectLabel } from "../domain/ideas/subjects.ts";
 import { projectFromIdea } from "../domain/projects.ts";
@@ -18,6 +18,13 @@ const MODES: { id: GenMode; label: string; hint: string }[] = [
   { id: "series", label: "Series", hint: "Could become a recurring format." },
   { id: "curiosity", label: "Curiosity", hint: "Steered by what you type below." },
   { id: "random", label: "Random", hint: "Unexpected picks to break habits." },
+];
+const FOCUS: { id: ContentFocus; label: string }[] = [
+  { id: "gaming-only", label: "Gaming only" },
+  { id: "gaming-first", label: "Gaming first" },
+  { id: "gaming-tech", label: "Gaming + tech" },
+  { id: "variety", label: "Variety" },
+  { id: "explore", label: "Outside my niche" },
 ];
 const INTEREST: { id: InterestMode; label: string }[] = [
   { id: "familiar", label: "Familiar" },
@@ -124,6 +131,11 @@ function Generate() {
             {MODES.find((m) => m.id === mode)?.hint}
           </p>
           <div className="row">
+            <span className="label" style={{ width: 120 }}>Content focus</span>
+            <Segmented value={controls.contentFocus ?? "gaming-first"} options={FOCUS} onChange={(v) => set({ contentFocus: v ?? "gaming-first" })} label="Channel content focus" />
+          </div>
+          <p className="dim small" style={{ marginLeft: 130 }}>Gaming first: primarily games, occasionally gaming-adjacent tech. Random and Completely new still stay in your chosen niche.</p>
+          <div className="row">
             <span className="label" style={{ width: 120 }}>
               Interest
             </span>
@@ -136,7 +148,7 @@ function Generate() {
             <input
               className="input grow"
               value={controls.curiosity ?? ""}
-              placeholder="optional: anything on your mind, e.g. old phones, cooking, Linux on weird hardware"
+              placeholder="optional: Morrowind, odd itch.io games, vintage RPGs, modded Skyrim"
               onChange={(e) => setControls({ ...controls, curiosity: e.target.value })}
               onKeyDown={(e) => e.key === "Enter" && void run()}
             />
