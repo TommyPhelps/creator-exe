@@ -48,7 +48,7 @@ export function parseTranscript(source: string, filename: string): ParsedTranscr
     if (index < 0) continue;
     const parts = (lines[index] ?? "").split("-->");
     const start = readTimestamp(parts[0] ?? "");
-    const end = readTimestamp((parts[1] ?? "").split(/\s+/)[0] ?? "");
+    const end = readTimestamp((parts[1] ?? "").trim().split(/\s+/)[0] ?? "");
     const content = cleanCueText(lines.slice(index + 1));
     if (start === null || end === null || end < start || !content) { discarded++; continue; }
     cues.push({ start, end, text: content });
