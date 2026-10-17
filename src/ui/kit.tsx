@@ -203,7 +203,7 @@ export function LevelMeter({ value, label }: { value: LevelValue; label?: string
     );
   }
   return (
-    <span className={`level ${value === "unknown" ? "unknown" : ""}`} title={label ? `${label}: ${value}` : value} aria-label={label ? `${label}: ${value}` : value}>
+    <span className="level" title={label ? `${label}: ${value}` : value} aria-label={label ? `${label}: ${value}` : value}>
       {[1, 2, 3].map((i) => (
         <i key={i} className={i <= n ? "on" : ""} />
       ))}
