@@ -69,3 +69,35 @@ Run these on the installed app. Each maps to a success workflow in the brief.
 
 **Readability**
 1. On the 1440p monitor, pass if idea cards are readable without leaning in, three cards fill the width, and Details expands the rest.
+
+## v0.1.2
+
+**Your data survives**
+1. Install 0.1.2 over 0.1.1 (or over the 0.2.0 preview, if you tried it). Pass if the boot screen reports schema v4, and your game library, Creator Memory, imported videos, projects and thumbnails are all still there.
+2. Make a backup (Backup, top right), then File → Restore from backup. Pass if nothing is lost.
+
+**Find an idea → start a project → see how to begin**
+1. Idea Machine → Generate → Start project on a card for one of your games. Pass if the project opens on the **Recording sheet** showing the game, the hook, why someone would watch, two or three approaches to pick from, where to start, moments to capture (as a checklist), what you need (listed once) and the next step.
+2. Pass if every older planning field (research, equipment, structure, upload info and the rest) is under **More notes**, and an older project still shows what you wrote in it.
+3. Start the same idea again from the Inbox. Pass if it reopens the same project instead of creating a second one.
+4. Add **My notes** to an idea in the Inbox, then start it. Pass if the notes are on the recording sheet.
+
+**Game-specific ideas** (judge these yourself)
+1. Type **Warband** in *Build around games* and generate. Pass if all three ideas are Warband videos of different kinds.
+2. Try **modded Skyrim**, **Minecraft modpacks**, **itch.io horror**, **Morrowind**, **Elden Ring, Thief**. Pass if each gives ideas about what you typed, with real places, systems or events from the game as moments, and none reads like a template with the name swapped in.
+3. Type a game the app doesn't know (e.g. **Ultrakill**). Pass if it says it has no notes on that game and offers general formats that don't claim anything about it.
+4. With your library imported, ask for a game you've played for hours. Pass if there's no "first time" idea for it and the app says why.
+5. Pass if no idea is titled "Is X an overlooked classic?", "Is X still worth playing?" or "Why X is underrated".
+
+**Feedback steers, it doesn't take over**
+1. Choose *I like this kind of video* on a mechanics idea, then generate a batch of six. Pass if most of the batch is still other kinds of video.
+
+**Your channel, your look**
+1. Channel DNA → Your channel. Pass if the description is exactly yours, line breaks included, and edits you make are kept.
+2. Pass if nothing in the app writes jokes, scripts or voices or generates thumbnails; visual beats on a recording sheet only point at situations.
+
+**Four steps and 1440p**
+1. Video Workshop. Pass if the board has four columns, Plan, Record, Edit and Publish, each card shows its exact stage, and dragging a card to the next column moves it.
+2. On a project, the Step buttons move it between the four steps; the stage dropdown still sets the exact stage.
+3. Control Room shows the current project's step and a Continue button first. Tonight lists projects you could pick up instead.
+4. Pass if a notification never blocks a button you need: they disappear on their own, and clicking one dismisses it.

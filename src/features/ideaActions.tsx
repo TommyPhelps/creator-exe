@@ -237,6 +237,12 @@ export function IdeaCard(props: {
         <dl className="kv selectable">
           <dt>You need</dt>
           <dd>{d.tonight.needs.join("; ")}</dd>
+          {d.startingSituation ? (
+            <>
+              <dt>Where it starts</dt>
+              <dd>{d.startingSituation}</dd>
+            </>
+          ) : null}
           <dt>First five minutes</dt>
           <dd>
             <b>{d.tonight.firstFive}</b>

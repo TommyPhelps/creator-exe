@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useAction, useApp, useData } from "../app/context.tsx";
 import { createProject, deleteProject, listProjects, listTasks, updateProject } from "../db/repos.ts";
 import { STAGES, type Complexity, type Project, type Stage } from "../domain/types.ts";
-import { suggestedNextAction, stageLabel } from "../domain/projects.ts";
+import { PHASES, phaseOf, stageForPhase, suggestedNextAction, stageLabel, type Phase } from "../domain/projects.ts";
 import { relativeTime } from "../lib/util.ts";
 import { Button, Chip, Empty, PageHead, Segmented, Win } from "../ui/kit.tsx";
 
@@ -11,6 +11,8 @@ const COMPLEXITY: { id: Complexity; label: string }[] = [
   { id: "standard", label: "Standard" },
   { id: "ambitious", label: "Ambitious" },
 ];
+
+type Lane = Phase | "archived";
 
 interface Menu {
   x: number;
@@ -26,7 +28,7 @@ export function Projects() {
   const [complexity, setComplexity] = useState<Complexity | null>(null);
   const [showArchived, setShowArchived] = useState(false);
   const [menu, setMenu] = useState<Menu | null>(null);
-  const [drag, setDrag] = useState<{ id: string; x: number; y: number; over: Stage | null } | null>(null);
+  const [drag, setDrag] = useState<{ id: string; x: number; y: number; over: Lane | null } | null>(null);
   const dragStart = useRef<{ id: string; x: number; y: number } | null>(null);
 
   const { data } = useData(async () => ({ projects: await listProjects(db, true), tasks: await listTasks(db) }), []);
@@ -39,6 +41,16 @@ export function Projects() {
         (!q || `${p.title} ${p.premise} ${p.nextAction} ${p.details.customStatus}`.toLowerCase().includes(q)),
     );
   }, [data, query, complexity, showArchived]);
+
+  const dropOn = (p: Project, lane: Lane) => {
+    if (lane === "archived") {
+      if (!p.archived) void act(() => updateProject(db, p.id, { archived: true }), { title: "ARCHIVED", body: p.title });
+      return;
+    }
+    const stage = stageForPhase(p.stage, lane);
+    if (p.archived) void act(() => updateProject(db, p.id, { archived: false, stage: stage === "archived" ? "idea" : stage }), { title: "RESTORED", body: p.title });
+    else moveTo(p, stage);
+  };
 
   const moveTo = (p: Project, stage: Stage) => {
     if (p.stage === stage) return;
@@ -55,7 +67,7 @@ export function Projects() {
       if (!s) return;
       if (!drag && Math.hypot(e.clientX - s.x, e.clientY - s.y) < 6) return;
       const el = document.elementFromPoint(e.clientX, e.clientY)?.closest("[data-lane]") as HTMLElement | null;
-      setDrag({ id: s.id, x: e.clientX, y: e.clientY, over: (el?.dataset.lane as Stage | undefined) ?? null });
+      setDrag({ id: s.id, x: e.clientX, y: e.clientY, over: (el?.dataset.lane as Lane | undefined) ?? null });
     };
     const onUp = () => {
       const s = dragStart.current;
@@ -63,7 +75,7 @@ export function Projects() {
       setDrag((d) => {
         if (d && s && d.over) {
           const p = data?.projects.find((x) => x.id === d.id);
-          if (p) moveTo(p, d.over);
+          if (p) dropOn(p, d.over);
         }
         return null;
       });
@@ -91,7 +103,8 @@ export function Projects() {
     if (p) go({ section: "workshop", projectId: p.id });
   };
 
-  const lanes = STAGES.filter((s) => showArchived || s.id !== "archived");
+  const lanes: { id: Lane; label: string }[] = [...PHASES.map((x) => ({ id: x.id as Lane, label: x.label })), ...(showArchived ? [{ id: "archived" as Lane, label: "Archived" }] : [])];
+  const laneOf = (p: Project): Lane => (p.archived || p.stage === "archived" ? "archived" : (phaseOf(p.stage) ?? "plan"));
   const dragged = drag ? data?.projects.find((p) => p.id === drag.id) : null;
 
   const card = (p: Project) => (
@@ -113,6 +126,7 @@ export function Projects() {
       <b>{p.title}</b>
       <span className="next">&gt; {data ? suggestedNextAction(p, data.tasks) : p.nextAction}</span>
       <span className="row small">
+        <Chip title="Detailed stage">{p.archived ? "Archived" : stageLabel(p.stage)}</Chip>
         <Chip>{COMPLEXITY.find((c) => c.id === p.complexity)?.label}</Chip>
         {p.priority > 0 ? <Chip kind="accent">P{p.priority}</Chip> : null}
         {p.details.customStatus ? <Chip kind="warn">{p.details.customStatus}</Chip> : null}
@@ -126,7 +140,7 @@ export function Projects() {
       <PageHead
         sys="VIDEO WORKSHOP :: PROJECT ARCHIVE"
         title="Projects"
-        lede="Drag cards between stages, or right-click a card for more. Every project shows one next action."
+        lede="Four steps: Plan, Record, Edit, Publish. Drag a card to the next step, or right-click it to set the exact stage. Every project shows one next action."
         actions={
           <Button variant="primary" icon="plus" onClick={() => void newProject()}>
             New project
@@ -159,7 +173,7 @@ export function Projects() {
       ) : view === "board" ? (
         <div className="kanban">
           {lanes.map((s) => {
-            const items = projects.filter((p) => (p.archived ? "archived" : p.stage) === s.id);
+            const items = projects.filter((p) => laneOf(p) === s.id);
             return (
               <section key={s.id} className={`lane ${drag?.over === s.id ? "drop" : ""}`} data-lane={s.id} aria-label={s.label}>
                 <header>
@@ -205,7 +219,7 @@ export function Projects() {
       {drag && dragged ? (
         <div className="drag-ghost pcard" style={{ left: drag.x + 8, top: drag.y + 8 }}>
           <b>{dragged.title}</b>
-          <span className="next">{drag.over ? `Move to ${stageLabel(drag.over)}` : "Drop on a stage"}</span>
+          <span className="next">{drag.over ? `Move to ${lanes.find((l) => l.id === drag.over)?.label ?? drag.over}` : "Drop on a step"}</span>
         </div>
       ) : null}
 

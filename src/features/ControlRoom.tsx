@@ -3,7 +3,7 @@ import { useAction, useApp, useData } from "../app/context.tsx";
 import { listIdeas, listProjects, listResearch, listTasks, listThumbnails, listVideos, listProfile, recordImpressions, updateProject } from "../db/repos.ts";
 import { generateIdeas, type GeneratedIdea } from "../domain/ideas/generator.ts";
 import { loadCreatorContext } from "../domain/ideas/context.ts";
-import { ACTIVE_STAGES, isUnfinished, stageIndex, stageLabel, suggestedNextAction } from "../domain/projects.ts";
+import { PHASES, isUnfinished, phaseOf, stageIndex, stageLabel, suggestedNextAction } from "../domain/projects.ts";
 import { relativeTime } from "../lib/util.ts";
 import { Button, Empty, Note, Win } from "../ui/kit.tsx";
 import { Icon } from "../ui/icons.tsx";
@@ -17,31 +17,40 @@ function NowProducing({ project, next, onOpen, onDone }: { project: Project | nu
         <div className="lcd-label">NOW PRODUCING</div>
         <div className="lcd-title">NO ACTIVE PROJECT</div>
         <div className="lcd-line">&gt; Start one from TONIGHT.EXE or the Idea Machine.</div>
-        <div className="meter">
-          {ACTIVE_STAGES.map((s) => (
-            <i key={s} />
+        <div className="meter steps">
+          {PHASES.map((s) => (
+            <i key={s.id} />
+          ))}
+        </div>
+        <div className="stages steps">
+          {PHASES.map((s) => (
+            <span key={s.id}>{s.label.toUpperCase()}</span>
           ))}
         </div>
       </div>
     );
   }
-  const idx = stageIndex(project.stage);
+  const phase = phaseOf(project.stage);
+  const idx = PHASES.findIndex((x) => x.id === phase);
   return (
     <div className="stack">
       <div className="lcd">
-        <div className="lcd-label">NOW PRODUCING :: {stageLabel(project.stage).toUpperCase()}</div>
+        <div className="lcd-label">
+          NOW PRODUCING :: {(PHASES[idx]?.label ?? stageLabel(project.stage)).toUpperCase()}
+          {PHASES[idx] && PHASES[idx].stages.length > 1 ? ` (${stageLabel(project.stage).toLowerCase()})` : ""}
+        </div>
         <div className="lcd-title selectable" title={project.title}>
           {project.title}
         </div>
         <div className="lcd-line">&gt; NEXT: {next || "Decide the next small step"}</div>
-        <div className="meter" aria-label={`Stage ${idx + 1} of ${ACTIVE_STAGES.length}`}>
-          {ACTIVE_STAGES.map((s, i) => (
-            <i key={s} className={i < idx ? "on" : i === idx ? "on now" : ""} />
+        <div className="meter steps" aria-label={`Step ${idx + 1} of ${PHASES.length}`}>
+          {PHASES.map((s, i) => (
+            <i key={s.id} className={i < idx ? "on" : i === idx ? "on now" : ""} />
           ))}
         </div>
-        <div className="stages">
-          {ACTIVE_STAGES.map((s) => (
-            <span key={s}>{stageLabel(s).toUpperCase()}</span>
+        <div className="stages steps">
+          {PHASES.map((s) => (
+            <span key={s.id}>{s.label.toUpperCase()}</span>
           ))}
         </div>
       </div>

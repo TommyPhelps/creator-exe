@@ -90,6 +90,31 @@ export function stageIndex(stage: Stage): number {
   return STAGES.findIndex((s) => s.id === stage);
 }
 
+/**
+ * The four steps of making a video. They sit on top of the detailed stages
+ * (which still exist and still work): Plan covers idea to ready-to-record,
+ * Record is recording, Edit covers editing and the thumbnail, Publish covers
+ * packaging to published.
+ */
+export const PHASES = [
+  { id: "plan", label: "Plan", stages: ["idea", "researching", "preparing", "ready_to_record"] },
+  { id: "record", label: "Record", stages: ["recording"] },
+  { id: "edit", label: "Edit", stages: ["editing", "thumbnail"] },
+  { id: "publish", label: "Publish", stages: ["packaging", "ready_to_upload", "published"] },
+] as const satisfies readonly { id: string; label: string; stages: readonly Stage[] }[];
+export type Phase = (typeof PHASES)[number]["id"];
+
+/** The step a stage belongs to; archived projects have none. */
+export function phaseOf(stage: Stage): Phase | null {
+  return PHASES.find((p) => (p.stages as readonly Stage[]).includes(stage))?.id ?? null;
+}
+
+/** Moving to a step: stay put if already in it, otherwise go to the step's first stage. */
+export function stageForPhase(current: Stage, phase: Phase): Stage {
+  if (phaseOf(current) === phase) return current;
+  return (PHASES.find((p) => p.id === phase)?.stages[0] ?? current) as Stage;
+}
+
 export const ACTIVE_STAGES: Stage[] = ["idea", "researching", "preparing", "ready_to_record", "recording", "editing", "thumbnail", "packaging", "ready_to_upload"];
 
 export function isUnfinished(p: Project): boolean {

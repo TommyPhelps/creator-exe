@@ -148,7 +148,7 @@ export function App(props: { platform: Platform; initialSettings: AppSettings; a
   const toast = useCallback((title: string, body?: string, kind?: "ok" | "err") => {
     const id = ++toastId.current;
     setToasts((t) => [...t.slice(-3), { id, title, body, kind }]);
-    window.setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), kind === "err" ? 9000 : 4200);
+    window.setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), kind === "err" ? 9000 : title === "SYSTEM" ? 7000 : 4200);
   }, []);
 
   const changed = useCallback(() => {
@@ -189,7 +189,7 @@ export function App(props: { platform: Platform; initialSettings: AppSettings; a
     try {
       const p = await createProject(platform.db, { title: "Untitled video", nextAction: "Write one sentence about why you want to make this." });
       changed();
-      toast("PROJECT INITIALIZED", "Give it a working title in the Plan tab.");
+      toast("PROJECT INITIALIZED", "Give it a working title on the recording sheet.");
       go({ section: "workshop", projectId: p.id });
     } catch (e) {
       toast("ERROR", e instanceof Error ? e.message : String(e), "err");
@@ -395,7 +395,13 @@ export function App(props: { platform: Platform; initialSettings: AppSettings; a
 
       <div className="toasts" aria-live="polite">
         {toasts.map((t) => (
-          <div key={t.id} className={`toast ${t.kind === "err" ? "err" : ""}`} role={t.kind === "err" ? "alert" : "status"}>
+          <div
+            key={t.id}
+            className={`toast ${t.kind === "err" ? "err" : ""}`}
+            role={t.kind === "err" ? "alert" : "status"}
+            title="Click to dismiss"
+            onClick={() => setToasts((all) => all.filter((x) => x.id !== t.id))}
+          >
             <div className="t-head">
               <span className={`led ${t.kind === "err" ? "warn" : ""}`} />
               {t.title}

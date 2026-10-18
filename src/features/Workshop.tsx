@@ -20,7 +20,7 @@ import {
   type ProjectPatch,
 } from "../db/repos.ts";
 import { STAGES, type Complexity, type Project, type ResearchItem, type TaskList } from "../domain/types.ts";
-import { rescueOptions, stageLabel, suggestedNextAction } from "../domain/projects.ts";
+import { PHASES, phaseOf, rescueOptions, stageForPhase, stageLabel, suggestedNextAction } from "../domain/projects.ts";
 import { formatDate, relativeTime } from "../lib/util.ts";
 import { Button, Chip, Dialog, Empty, Note, PageHead, Segmented, Select, Tabs, TextInput, Win } from "../ui/kit.tsx";
 import { ResearchEditor, SOURCE_TYPES, VERIFICATION } from "./Research.tsx";
@@ -388,8 +388,14 @@ export function Workshop({ projectId, tab: initialTab }: { projectId: string; ta
       />
       <div className="row">
         <span className="label" style={{ width: 100 }}>
-          Stage
+          Step
         </span>
+        <Segmented
+          value={p.archived ? null : phaseOf(p.stage)}
+          options={PHASES.map((x) => ({ id: x.id, label: x.label }))}
+          onChange={(v) => v && save({ stage: stageForPhase(p.stage, v), archived: false })}
+          label="Step"
+        />
         <Select value={p.stage} options={STAGES} onChange={(v) => save({ stage: v, archived: v === "archived" })} className="" />
         <span className="label">Size</span>
         <Segmented<Complexity>

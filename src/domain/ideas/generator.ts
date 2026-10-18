@@ -719,7 +719,7 @@ export function generateIdeas(controls: GeneratorControls, ctx: CreatorContext, 
       enjoyEvidence++;
     }
 
-    if (c.hand && c.gameNames.length) add(1, c.gameNames.length > 1 ? "Written specifically for these games" : `Written specifically for ${mainGame}`);
+    if (c.hand && c.gameNames.length) add(1, c.gameNames.length > 1 ? "Written specifically for these games" : c.catalog[0]?.generic ? "Has a hand-written plan" : `Written specifically for ${mainGame}`);
     if (s.anyGame) factors.push({ text: `A general format: no notes on ${mainGame} yet`, effect: "note" });
     if (c.videoType === "revisit" && mainGame && wasPlayed(c)) {
       const h = playedHours(c);

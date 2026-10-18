@@ -26,7 +26,8 @@ src/
   features/   One file per screen (ControlRoom, Tonight, IdeaMachine, Projects, Workshop,
               Research, thumbnail/ThumbnailLab+Editor, PackagingLab, ChannelDna,
               CreatorMemory, Settings, QuickCapture)
-  domain/     Pure product logic, no UI: ideas/ (library, subjects, generator, context),
+  domain/     Pure product logic, no UI: ideas/ (library, libraryGaming, libraryGames, request,
+              subjects, generator, context), handoff (idea -> project),
               channel/ (feed, Data API, Studio CSV, merge, analyze), thumbnails/ (layer model,
               concepts, SVG render, OpenRaster, history), titles, packaging, projects,
               backup, brief, settings
@@ -50,7 +51,7 @@ that interface, so the same code runs inside the Windows app (`tauri.ts`) and in
 a real SQLite database (`tests/helpers/sqliteDb.ts`). A plain browser cannot open the app's
 database and gets a clear boot error instead of fake data.
 
-## Data model (schema v3)
+## Data model (schema v4)
 
 | Table | Holds |
 |---|---|
@@ -67,14 +68,16 @@ database and gets a clear boot error instead of fake data.
 | `games` | Your imported game library (v2): title, ownership, playtime, Steam app ID, tags, source file |
 | `game_info` | Cached Steam store lookups (v2): matched name, cover URL, free flag, price text, date checked |
 
-v3 (v0.1.2) is a repair step, not new data: two different "v2" layouts shipped (v0.1.1's, and the 0.2.0 Phase 2 preview's `video_forensics` table). v3 adds whatever either is missing, with `CREATE TABLE IF NOT EXISTS` and column checks, so every database ends up with both and nothing is dropped. Phase 2 features will use v4+.
+v3 (v0.1.2) is a repair step, not new data: two different "v2" layouts shipped (v0.1.1's, and the 0.2.0 Phase 2 preview's `video_forensics` table). v3 adds whatever either is missing, with `CREATE TABLE IF NOT EXISTS` and column checks, so every database ends up with both and nothing is dropped.
+
+v4 (v0.1.2) adds `ideas.notes` (your notes on an idea, carried into its project). Recording-sheet fields live in the existing `projects.details` JSON, so older projects open unchanged with empty sheet fields. Phase 2 features will use v5+.
 
 v2 also added `profile_items.scope` (channel / personal / watching), `videos.user_subjects` (your own topics) and `idea_feedback.detail` (what a reaction was about).
 
 Migrations are append-only and run at boot; the boot screen reports the schema version and the
 app shows a notice after an upgrade. A safety backup is written before restores.
 
-## Recommendation engine (v0.1.1)
+## Recommendation engine (v0.1.1, extended in v0.1.2)
 
 `src/domain/ideas/generator.ts` runs in a fixed order so modes and filters compose predictably:
 
@@ -83,6 +86,13 @@ app shows a notice after an upgrade. A safety backup is written before restores.
 3. Soft filters (genre, era, style, effort...) relaxed least-important first, always inside the gates.
 4. Scoring: channel-scope interests, favorite games, library, inspiration games, learned weights per subject / game / video type / concept (fading, capped), interest direction within the focus, mode shaping, recency penalties.
 5. Slots assigned to domains by deficit against the focus over recent batches (`focus.ts`), filled greedily with no repeated concept, game or video type; one slot is reserved for something new.
+
+v0.1.2 additions:
+- `libraryGames.ts` holds hand-written ideas for the games Tommy named (hook, why someone watches, approaches, starting point, moments, optional visual beats) and `HAND_DETAILS`, which adds the same specifics to individual template variants. Template variants that only slot in one of those games, without specifics, are marked `retired`: never suggested, but still resolvable so old feedback keeps teaching.
+- `request.ts` reads "Build around games" ("Warband", "modded Skyrim", "Minecraft modpacks", "itch.io horror"). Requested games are picked first, several different videos each; games outside the catalog get neutral `ANY_GAME_FORMATS` that claim nothing about the game.
+- Played games (library playtime of 2+ hours, rating, favourite or status) never get first-playthrough ideas; `when: "played"` ideas need that evidence.
+- At most a third of a batch can be won by learned likes; after that, candidates are compared without their learned boost.
+- Free mods and modpacks (`requires` in the catalog) are only "free" when you own the game they run on.
 
 ## Evidence model
 
@@ -95,7 +105,7 @@ keyword matching, not from watching videos. Idea ratings are three-step levels
 ## Navigation
 
 MAKE: Control Room · Tonight.exe · Idea Machine (Generate / Inbox / Compare = Idea Advisor) ·
-Video Workshop (board + list + per-project workshop)
+Video Workshop (board in four steps, Plan · Record · Edit · Publish, over the eleven detailed stages; list; per-project recording sheet)
 PREPARE: Research · Thumbnail Lab · Packaging Lab (Title Lab + description/tags/checklist)
 YOU: Channel DNA · Creator Memory · Settings
 

@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
-import { useApp } from "../app/context.tsx";
-import { recordImpressions } from "../db/repos.ts";
+import { useApp, useData } from "../app/context.tsx";
+import { listProjects, listTasks, recordImpressions } from "../db/repos.ts";
+import { PHASES, isUnfinished, phaseOf, suggestedNextAction } from "../domain/projects.ts";
 import { generateIdeas, type GeneratedIdea } from "../domain/ideas/generator.ts";
 import { loadCreatorContext } from "../domain/ideas/context.ts";
 import type { Energy, RecordingStyle, TimeBox } from "../domain/types.ts";
-import { Button, Note, PageHead, Segmented } from "../ui/kit.tsx";
+import { Button, Note, PageHead, Segmented, Win } from "../ui/kit.tsx";
 import { IdeaCard, useIdeaActions } from "./ideaActions.tsx";
 
 const TIMES = [
@@ -25,7 +26,15 @@ const REC = [
 ] as const;
 
 export function Tonight() {
-  const { db, toast, settings } = useApp();
+  const { db, toast, settings, go } = useApp();
+  const inProgress = useData(async () => {
+    const [projects, tasks] = await Promise.all([listProjects(db), listTasks(db)]);
+    return projects
+      .filter(isUnfinished)
+      .sort((a, b) => (b.openedAt ?? b.updatedAt).localeCompare(a.openedAt ?? a.updatedAt))
+      .slice(0, 4)
+      .map((p) => ({ p, next: suggestedNextAction(p, tasks) }));
+  }, []);
   const actions = useIdeaActions();
   const [time, setTime] = useState<TimeBox | null>(null);
   const [energy, setEnergy] = useState<Energy | null>(null);
@@ -95,6 +104,19 @@ export function Tonight() {
           />
         ))}
       </div>
+      {inProgress.data?.length ? (
+        <Win title="OR PICK UP WHERE YOU LEFT OFF" icon="projects" meta={`${inProgress.data.length}`}>
+          <div className="continue-grid">
+            {inProgress.data.map(({ p, next }) => (
+              <button key={p.id} className="btn continue-item" onClick={() => go({ section: "workshop", projectId: p.id })}>
+                <span className="dim small">{(PHASES.find((x) => x.id === phaseOf(p.stage))?.label ?? "").toUpperCase()}</span>
+                <b className="ellipsis">{p.title}</b>
+                <span className="small ellipsis">&gt; {next}</span>
+              </button>
+            ))}
+          </div>
+        </Win>
+      ) : null}
       {!busy && visible.length === 0 ? (
         <Note>
           All three dismissed. <Button size="small" onClick={() => setSeed((s) => s + 1)}>Show three more</Button>
