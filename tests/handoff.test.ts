@@ -77,7 +77,8 @@ test("starting the same idea twice opens the existing project instead of making 
 });
 
 test("ideas without hand-written approaches still get usable ones", () => {
-  const g = generateIdeas({}, emptyContext(), { count: 1, rng: mulberry32(3) }).ideas[0]!;
+  const g = generateIdeas({}, emptyContext(), { count: 12, rng: mulberry32(3) }).ideas.find((i) => !i.details.approaches)!;
+  assert.ok(g, "a template idea without hand-written approaches");
   const list = approachesFor(g.details);
   assert.ok(list.length >= 1);
   assert.equal(list[0]?.how, g.details.whatYouDo);

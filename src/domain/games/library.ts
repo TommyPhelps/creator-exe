@@ -234,8 +234,8 @@ export type AccessStatus =
   | { kind: "none" } // no game needed
   | { kind: "free"; note: string }
   | { kind: "owned"; via: "library" | "yours" }
-  | { kind: "not_owned"; why: "not_in_library" | "wishlist" | "marked_not_owned" }
-  | { kind: "unknown"; why: "no_library" | "unknown_in_library" | "unknown_price" };
+  | { kind: "not_owned"; why: "not_in_library" | "wishlist" | "marked_not_owned"; needs?: string }
+  | { kind: "unknown"; why: "no_library" | "unknown_in_library" | "unknown_price"; needs?: string };
 
 export interface LibraryIndex {
   size: number;
@@ -262,6 +262,14 @@ export function accessFor(gameName: string | null, lib: LibraryIndex): AccessSta
   const names = cat ? catalogNames(cat) : [canon(gameName)];
   const inLib = findInLibrary(lib, names);
   if (inLib?.ownership === "owned") return { kind: "owned", via: "library" };
+  if (cat?.access === "free" && cat.requires) {
+    // A free mod or modpack: what matters is whether you own the game it runs on.
+    const base = accessFor(cat.requires, lib);
+    const baseName = findCatalogGame(cat.requires)?.title ?? cat.requires;
+    if (base.kind === "owned") return { kind: "free", note: `${cat.accessNote ?? "Free."} Runs on ${baseName}, which you have.` };
+    if (base.kind === "not_owned" || base.kind === "unknown") return { ...base, needs: baseName };
+    return { kind: "free", note: cat.accessNote ?? "Free to download." };
+  }
   if (cat?.access === "free") return { kind: "free", note: cat.accessNote ?? "Free to download." };
   if (inLib?.ownership === "wishlist") return { kind: "not_owned", why: "wishlist" };
   if (inLib?.ownership === "not_owned") return { kind: "not_owned", why: "marked_not_owned" };
@@ -280,8 +288,10 @@ export function accessLabel(a: AccessStatus): string {
     case "owned":
       return a.via === "library" ? "In your library" : "A game you already have";
     case "not_owned":
+      if (a.needs) return a.why === "not_in_library" ? `Free itself, but needs ${a.needs}, which isn't in your imported library` : `Free itself, but needs ${a.needs} (not owned in your library)`;
       return a.why === "wishlist" ? "On your wishlist (not owned)" : a.why === "marked_not_owned" ? "Marked not owned in your library" : "Not in your imported library: you'd need to buy it";
     case "unknown":
+      if (a.needs) return `Free itself, but needs ${a.needs} (ownership unknown)`;
       return a.why === "no_library" ? "Ownership unknown (import your library to check)" : a.why === "unknown_in_library" ? "In your library, ownership not recorded" : "Price depends on which one you pick";
   }
 }

@@ -29,7 +29,8 @@ import type {
   TimeBox,
   TonightPlan,
 } from "../types.ts";
-import { IDEA_LIBRARY, type IdeaSeed } from "./library.ts";
+import { IDEA_LIBRARY, type IdeaSeed, type SeedDetail } from "./library.ts";
+import { FOCUS_GAMES, HAND_DETAILS } from "./libraryGames.ts";
 import { adjacentTo, subjectDomain, subjectLabel, subjectsForText, type Domain } from "./subjects.ts";
 import { DEFAULT_FOCUS, allocateDomains, isExploring, presetFocus, share, type ContentFocus } from "./focus.ts";
 import { videoTypeLabel, videoTypeStyle, type VideoType } from "./videoTypes.ts";
@@ -186,7 +187,17 @@ export interface Candidate {
   domain: Domain;
   videoType: VideoType;
   era: Era | null;
+  /** Hand-written specifics: the seed's own (game-specific ideas) or HAND_DETAILS for a template variant. */
+  hand: SeedDetail | null;
+  /** Kept so old feedback still resolves, but no longer suggested (see libraryGames.ts). */
+  retired: boolean;
 }
+
+/** Template ideas a hand-written game idea now covers. */
+const SUPERSEDED = new Set(["every-way-one-level:deus-ex", "mechanic-tested:thief-s-light-and-sound-stealth", "mechanic-tested:morrowind-s-alchemy", "npc-directions:morrowind", "map-by-hand:morrowind"]);
+const FOCUS = new Set(FOCUS_GAMES.map((t) => canon(t)));
+/** Whole concepts no longer suggested (v0.1.2): "Is X an overlooked classic?" and "Is X still worth playing?" formats. */
+const RETIRED_SEEDS = new Set(["overlooked-pc-game", "free-classic-tested"]);
 
 export function slugify(s: string): string {
   return s
@@ -207,15 +218,24 @@ function candidateFor(seed: IdeaSeed, variant: string | null): Candidate {
   let gameNames: string[] = [];
   if (variant !== null && seed.variants?.gamesFor?.[variant]) gameNames = seed.variants.gamesFor[variant] ?? [];
   else if (variant !== null && seed.variants?.games) gameNames = [variant];
+  else if (seed.games?.length) gameNames = seed.games;
   else if (seed.game) gameNames = [seed.game];
   const catalog = gameNames.map((n) => findCatalogGame(n));
   const subjects = [...new Set([...seed.subjects, ...catalog.flatMap((c) => c?.genres ?? [])])];
   const era = catalog.find((c) => c)?.era ?? null;
+  const key = variant === null ? seed.key : `${seed.key}:${slugify(variant)}`;
+  const own = seed.hook || seed.approaches || seed.moments ? seed : null;
+  const hand: SeedDetail | null = HAND_DETAILS[key] ?? own;
+  const names = catalog.map((c, i) => c?.title ?? gameNames[i] ?? "");
+  // A template that slots in one of the focus games, with nothing written for that game: retire it.
+  const genericFocus = !hand && variant !== null && names.length === 1 && FOCUS.has(canon(names[0] ?? ""));
   return {
-    key: variant === null ? seed.key : `${seed.key}:${slugify(variant)}`,
+    key,
+    hand,
+    retired: SUPERSEDED.has(key) || RETIRED_SEEDS.has(seed.key) || genericFocus,
     seed,
     variant,
-    gameNames: catalog.map((c, i) => c?.title ?? gameNames[i] ?? ""),
+    gameNames: names,
     catalog,
     subjects,
     domain: deriveDomain(seed),
@@ -270,23 +290,26 @@ function accessOf(c: Candidate, lib: LibraryIndex): AccessStatus {
 }
 
 export function materialize(c: Candidate, reasons: string[] = [], forTonight = false, access: AccessStatus = { kind: "none" }): { title: string; premise: string; details: IdeaDetails } {
-  const s = c.seed;
+  // Hand-written specifics win over the template's generic text.
+  const s: IdeaSeed = { ...c.seed, ...(c.hand ?? {}) };
+  const f = (t: string) => fill(t, c);
   const tonight = s.tonight
-    ? { needs: s.tonight.needs.map((n) => fill(n, c)), firstFive: fill(s.tonight.firstFive, c), minimumVideo: fill(s.tonight.minimumVideo, c), expansion: fill(s.tonight.expansion, c) }
+    ? { needs: s.tonight.needs.map(f), firstFive: f(s.tonight.firstFive), minimumVideo: f(s.tonight.minimumVideo), expansion: f(s.tonight.expansion) }
     : forTonight
       ? derivedTonight(s, c)
       : null;
-  const budgetNote = s.budgetNote ? fill(s.budgetNote, c) : s.budgetUsd === 0 ? (c.gameNames.length ? "Nothing to buy besides the game itself (see ownership)." : "No purchase needed.") : `Up to about $${s.budgetUsd}.`;
+  const budgetNote = s.budgetNote ? f(s.budgetNote) : s.budgetUsd === 0 ? (c.gameNames.length ? "Nothing to buy besides the game itself (see ownership)." : "No purchase needed.") : `Up to about $${s.budgetUsd}.`;
+  const specific = !!c.hand;
   return {
-    title: fill(s.title, c),
-    premise: fill(s.premise, c),
+    title: f(s.title),
+    premise: f(s.premise),
     details: {
-      premise: fill(s.premise, c),
-      why: fill(s.why, c),
-      whatYouDo: fill(s.whatYouDo, c),
-      worthExploring: fill(s.worthExploring, c),
-      audience: fill(s.audience, c),
-      requirements: s.requirements.map((r) => fill(r, c)),
+      premise: f(s.premise),
+      why: f(s.why),
+      whatYouDo: f(s.whatYouDo),
+      worthExploring: f(s.worthExploring),
+      audience: f(s.audience),
+      requirements: s.requirements.map(f),
       budgetUsd: s.budgetUsd,
       budgetNote,
       effort: s.effort,
@@ -297,9 +320,9 @@ export function materialize(c: Candidate, reasons: string[] = [], forTonight = f
       collab: s.collab ?? "solo",
       research: s.research,
       direction: s.direction,
-      thumbnail: fill(s.thumbnail, c),
-      firstStep: fill(s.firstStep, c),
-      alternatives: (s.alternatives ?? []).map((a) => fill(a, c)),
+      thumbnail: f(s.thumbnail),
+      firstStep: f(s.firstStep),
+      alternatives: (s.alternatives ?? []).map(f),
       series: s.series ?? false,
       originality: s.originality ?? "uncommon",
       tonight,
@@ -308,6 +331,13 @@ export function materialize(c: Candidate, reasons: string[] = [], forTonight = f
       domain: c.domain,
       games: c.gameNames,
       access: accessLabel(access),
+      ...(s.hook ? { hook: f(s.hook) } : {}),
+      ...(s.watchAppeal ? { watchAppeal: f(s.watchAppeal) } : {}),
+      ...(s.approaches?.length ? { approaches: s.approaches.map((a) => ({ name: f(a.name), how: f(a.how) })) } : {}),
+      ...(s.startingSituation ? { startingSituation: f(s.startingSituation) } : {}),
+      ...(s.moments?.length ? { moments: s.moments.map(f) } : {}),
+      ...(s.visualBeats?.length ? { visualBeats: s.visualBeats.map(f) } : {}),
+      ...(specific ? { specific } : {}),
     },
   };
 }
@@ -440,7 +470,7 @@ export function generateIdeas(controls: GeneratorControls, ctx: CreatorContext, 
   const now = opts.now ?? new Date();
   const mode: GenMode = controls.mode ?? "standard";
   const focus: ContentFocus = controls.explore ? presetFocus("explore") : (opts.focus ?? DEFAULT_FOCUS);
-  const all = expandLibrary(opts.library ?? IDEA_LIBRARY);
+  const all = expandLibrary(opts.library ?? IDEA_LIBRARY).filter((c) => !c.retired);
   const notes: string[] = [];
   const blocked = blockedKeys(ctx.feedback, now);
   const learned = learnFromFeedback(ctx.feedback, now);
@@ -648,6 +678,8 @@ export function generateIdeas(controls: GeneratorControls, ctx: CreatorContext, 
       enjoy += avg;
       enjoyEvidence++;
     }
+
+    if (c.hand && c.gameNames.length) add(1, `Written specifically for ${mainGame}`);
 
     // Your games.
     if (access.kind === "owned" && access.via === "library") add(1, `${mainGame} is in your library`);

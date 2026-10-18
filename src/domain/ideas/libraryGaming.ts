@@ -13,9 +13,9 @@
 import type { IdeaSeed } from "./library.ts";
 
 type Req = "key" | "title" | "premise" | "why" | "whatYouDo" | "worthExploring" | "audience" | "requirements" | "effort" | "time" | "thumbnail" | "firstStep" | "subjects" | "videoType";
-type SeedInput = Pick<IdeaSeed, Req> & Partial<Omit<IdeaSeed, Req>>;
+export type SeedInput = Pick<IdeaSeed, Req> & Partial<Omit<IdeaSeed, Req>>;
 
-const seed = (x: SeedInput): IdeaSeed => ({
+export const seed = (x: SeedInput): IdeaSeed => ({
   budgetUsd: 0,
   energy: "medium",
   recording: ["screen", "voiceover"],
@@ -30,7 +30,7 @@ const seed = (x: SeedInput): IdeaSeed => ({
   ...x,
 });
 
-const OBS = "Screen recorder (OBS)";
+export const OBS = "Screen recorder (OBS)";
 
 export const GAMING_LIBRARY: IdeaSeed[] = [
   // =================================================================== first playthroughs
@@ -234,7 +234,7 @@ export const GAMING_LIBRARY: IdeaSeed[] = [
     subjects: ["game-worlds", "open-world-rpg", "soulslike"],
     videoType: "retrospective",
     setup: "none",
-    variants: { slot: "game", games: true, values: ["The Witcher 3", "Elden Ring", "Dark Souls", "KOTOR", "a game that stayed with me"] },
+    variants: { slot: "game", games: true, values: ["The Witcher 3", "Elden Ring", "Dark Souls", "KOTOR"] },
   }),
   seed({
     key: "small-side-quests",

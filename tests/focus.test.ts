@@ -140,7 +140,7 @@ test("filters compose: tonight + genre + era + style all respected or reported a
   const commentary = generateIdeas({ style: "commentary" }, ctx(), { count: 3, rng: mulberry32(33) });
   assert.ok(commentary.ideas.every((i) => ["analysis", "retrospective", "investigation", "comparison", "short-take"].includes(i.videoType)));
   const history = generateIdeas({ angle: "history" }, ctx(), { count: 3, rng: mulberry32(34) });
-  assert.ok(history.ideas.every((i) => ["investigation", "retrospective", "comparison", "revisit", "first-playthrough"].includes(i.videoType)));
+  assert.ok(history.ideas.every((i) => ["investigation", "retrospective", "comparison", "revisit", "first-playthrough", "short-take"].includes(i.videoType)));
   const shorts = generateIdeas({ format: "short" }, ctx(), { count: 3, rng: mulberry32(35) });
   assert.ok(shorts.ideas.every((i) => i.details.format === "short" || i.details.format === "either"));
 });

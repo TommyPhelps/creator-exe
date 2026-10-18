@@ -7,6 +7,7 @@
 // promises views.
 
 import type {
+  Approach,
   Collab,
   ContentFormat,
   Depth,
@@ -21,6 +22,7 @@ import type {
 import type { Domain } from "./subjects.ts";
 import type { VideoType } from "./videoTypes.ts";
 import { GAMING_LIBRARY } from "./libraryGaming.ts";
+import { GAME_SPECIFIC_LIBRARY } from "./libraryGames.ts";
 
 export type Setup = "none" | "install" | "mods" | "hardware";
 
@@ -61,13 +63,33 @@ export interface IdeaSeed {
   videoType?: VideoType;
   /** A fixed game (catalog title) the idea is about. */
   game?: string;
+  /** Several fixed games, for ideas that compare or tour them. */
+  games?: string[];
   /** The idea uses games you already own (e.g. your backlog), so nothing needs buying. */
   ownedByDefinition?: boolean;
   /** How much setup stands between you and recording. */
   setup?: Setup;
   /** "game" = about playing it; "history" = research and history first. */
   angle?: "game" | "history";
+  // ---- Since v0.1.2: hand-written, game-specific detail (see libraryGames.ts).
+  /** The one-line question that makes the video interesting. */
+  hook?: string;
+  /** Why someone would click and keep watching. */
+  watchAppeal?: string;
+  /** Two or three genuinely different ways to make it; you pick one on the recording sheet. */
+  approaches?: Approach[];
+  /** Where in the game the recording starts. */
+  startingSituation?: string;
+  /** Real moments in the game worth capturing; they become the recording checklist. */
+  moments?: string[];
+  /** Optional pointers to visual situations. Never jokes: whether and how they're funny is up to you. */
+  visualBeats?: string[];
 }
+
+/** The hand-writable detail fields, also used to add specifics to one variant of a template. */
+export type SeedDetail = Partial<
+  Pick<IdeaSeed, "premise" | "why" | "whatYouDo" | "worthExploring" | "audience" | "requirements" | "thumbnail" | "firstStep" | "alternatives" | "tonight" | "hook" | "watchAppeal" | "approaches" | "startingSituation" | "moments" | "visualBeats">
+>;
 
 const RAW_GENERAL: IdeaSeed[] = [
   // ------------------------------------------------------------ retro computing / old OS
@@ -1207,4 +1229,4 @@ const RETAG: Record<string, Partial<IdeaSeed>> = {
 export const GENERAL_LIBRARY: IdeaSeed[] = RAW_GENERAL.map((s) => ({ domain: "other", videoType: "general", ...s, ...(RETAG[s.key] ?? {}) }));
 
 /** Everything the Idea Machine can suggest: the gaming library first, then the general one (only used when Content Focus allows it). */
-export const IDEA_LIBRARY: IdeaSeed[] = [...GAMING_LIBRARY, ...GENERAL_LIBRARY];
+export const IDEA_LIBRARY: IdeaSeed[] = [...GAME_SPECIFIC_LIBRARY, ...GAMING_LIBRARY, ...GENERAL_LIBRARY];

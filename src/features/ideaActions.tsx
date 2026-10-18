@@ -209,6 +209,7 @@ export function IdeaCard(props: {
         </div>
       )}
       <AccessBadge g={g} />
+      {d.hook ? <p className="selectable idea-hook">{d.hook}</p> : null}
       <p className="selectable premise">{g.premise}</p>
 
       <div className="idea-why">
@@ -261,10 +262,42 @@ export function IdeaCard(props: {
       {open ? (
         <div className="idea-details stack tight">
           <dl className="kv selectable">
+            {d.startingSituation ? (
+              <>
+                <dt>Where it starts</dt>
+                <dd>{d.startingSituation}</dd>
+              </>
+            ) : null}
             <dt>What you'd do</dt>
             <dd>{d.whatYouDo}</dd>
-            <dt>Worth exploring</dt>
-            <dd>{d.worthExploring}</dd>
+            {d.approaches?.length ? (
+              <>
+                <dt>Ways to make it</dt>
+                <dd>
+                  <ul className="plain">
+                    {d.approaches.map((a) => (
+                      <li key={a.name}>
+                        <b>{a.name}:</b> {a.how}
+                      </li>
+                    ))}
+                  </ul>
+                </dd>
+              </>
+            ) : null}
+            {d.moments?.length ? (
+              <>
+                <dt>Moments to capture</dt>
+                <dd>
+                  <ul className="plain">
+                    {d.moments.map((m) => (
+                      <li key={m}>{m}</li>
+                    ))}
+                  </ul>
+                </dd>
+              </>
+            ) : null}
+            <dt>{d.watchAppeal ? "Why someone watches" : "Worth exploring"}</dt>
+            <dd>{d.watchAppeal ?? d.worthExploring}</dd>
             <dt>Audience</dt>
             <dd>{d.audience}</dd>
             <dt>Budget</dt>

@@ -448,3 +448,12 @@ ul.plain { margin: 0; padding-left: 18px; }
 .moment input.input.done, .moment .done { text-decoration: line-through; opacity: .6; }
 .bullet { color: var(--led); }
 @media (max-width: 1300px) { .sheet { grid-template-columns: 1fr; } }
+
+/* v0.1.2: the hook of a hand-written idea */
+.idea-hook {
+  margin: 2px 0 0;
+  font-weight: 700;
+  color: var(--text);
+  font-size: calc(var(--base) + 1.5px);
+}
+.idea-card .idea-hook + .premise { color: var(--text-dim); font-size: var(--base); }

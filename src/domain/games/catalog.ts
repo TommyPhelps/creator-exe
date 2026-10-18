@@ -27,6 +27,8 @@ export interface CatalogGame {
   generic?: boolean;
   /** A placeholder that is by definition a game you already have or played ("an old PC game I own"). */
   yours?: boolean;
+  /** A free mod or modpack that still needs this (catalog) game to play. */
+  requires?: string;
   domain?: Domain;
 }
 
@@ -49,6 +51,12 @@ export const GAME_CATALOG: CatalogGame[] = [
   g("The Elder Scrolls III: Morrowind", 2002, ["rpg-classic", "open-world-rpg", "game-worlds"], "paid", { aliases: ["Morrowind"] }),
   g("Minecraft", 2011, ["modpacks", "survival-games"], "paid", { aliases: ["Minecraft: Java Edition"] }),
   g("Project Zomboid", 2013, ["survival-games"], "paid"),
+  g("Mount & Blade: Warband", 2010, ["strategy-games", "open-world-rpg", "game-worlds"], "paid", { aliases: ["Warband", "Mount and Blade: Warband", "Mount & Blade Warband"] }),
+  // ------------------------------------------------ free Minecraft modpacks (need Minecraft: Java Edition)
+  g("RLCraft", undefined, ["modpacks", "survival-games"], "free", { requires: "Minecraft", accessNote: "Free modpack by Shivaxi (Minecraft 1.12.2)." }),
+  g("SkyFactory 4", undefined, ["modpacks", "survival-games"], "free", { requires: "Minecraft", accessNote: "Free skyblock modpack (Minecraft 1.12.2)." }),
+  g("Create: Above and Beyond", undefined, ["modpacks", "game-mechanics"], "free", { requires: "Minecraft", aliases: ["Create Above and Beyond", "CABIN"], accessNote: "Free quest-driven Create modpack (Minecraft 1.16.5)." }),
+  g("GregTech: New Horizons", undefined, ["modpacks", "game-mechanics"], "free", { requires: "Minecraft", aliases: ["GT New Horizons", "GTNH"], accessNote: "Free modpack (Minecraft 1.7.10)." }),
   // ------------------------------------------------ classic RPGs / immersive sims / retro PC
   g("The Elder Scrolls IV: Oblivion", 2006, ["open-world-rpg", "rpg-classic"], "paid", { aliases: ["Oblivion"] }),
   g("The Elder Scrolls: Arena", 1994, ["rpg-classic", "retro-pc-games"], "free", { aliases: ["Arena"], accessNote: "Bethesda released it as a free download in 2004." }),
@@ -63,6 +71,7 @@ export const GAME_CATALOG: CatalogGame[] = [
   g("Star Wars: Knights of the Old Republic", 2003, ["rpg-classic"], "paid", { aliases: ["KOTOR"] }),
   g("Deus Ex", 2000, ["immersive-sims", "retro-pc-games"], "paid", { aliases: ["Deus Ex: Game of the Year Edition"] }),
   g("System Shock 2", 1999, ["immersive-sims", "horror-games", "retro-pc-games"], "paid"),
+  g("Thief II: The Metal Age", 2000, ["immersive-sims", "retro-pc-games"], "paid", { aliases: ["Thief 2"] }),
   g("Thief", 1998, ["immersive-sims", "retro-pc-games"], "paid", { aliases: ["Thief Gold", "Thief: The Dark Project"] }),
   g("Arx Fatalis", 2002, ["immersive-sims", "rpg-classic"], "paid"),
   g("Ultima Underworld: The Stygian Abyss", 1992, ["rpg-classic", "immersive-sims", "retro-pc-games"], "paid", { aliases: ["Ultima Underworld"] }),
@@ -82,7 +91,8 @@ export const GAME_CATALOG: CatalogGame[] = [
   g("Doom (shareware episode)", 1993, ["retro-pc-games", "game-history"], "free", { aliases: ["Doom"], accessNote: "The first episode, Knee-Deep in the Dead, was distributed free as shareware." }),
   // ------------------------------------------------ modern RPGs / worlds / mechanics
   g("The Witcher", 2007, ["rpg-classic", "game-worlds"], "paid", { aliases: ["The Witcher: Enhanced Edition"] }),
-  g("The Elder Scrolls V: Skyrim", 2011, ["open-world-rpg", "game-mods"], "paid", { aliases: ["Skyrim", "Skyrim Special Edition"] }),
+  g("The Elder Scrolls V: Skyrim", 2011, ["open-world-rpg", "game-mods"], "paid", { aliases: ["Skyrim", "Skyrim Special Edition", "Skyrim Anniversary Edition", "The Elder Scrolls V: Skyrim Special Edition"] }),
+  g("Enderal: Forgotten Stories", 2021, ["game-mods", "fan-projects", "open-world-rpg"], "free", { requires: "The Elder Scrolls V: Skyrim", aliases: ["Enderal", "Enderal: Forgotten Stories (Special Edition)"], accessNote: "Free on Steam, but needs Skyrim Special Edition owned on Steam." }),
   g("Fallout: New Vegas", 2010, ["open-world-rpg", "game-mods"], "paid", { aliases: ["New Vegas"] }),
   g("Kingdom Come: Deliverance", 2018, ["open-world-rpg", "game-mechanics"], "paid"),
   g("Disco Elysium", 2019, ["rpg-classic", "game-worlds"], "paid", { aliases: ["Disco Elysium - The Final Cut"] }),
@@ -103,6 +113,7 @@ export const GAME_CATALOG: CatalogGame[] = [
   g("Darkwood", 2017, ["horror-games", "survival-games"], "paid"),
   g("Dredge", 2023, ["horror-games", "indie-games"], "paid"),
   g("Night Factory", undefined, ["horror-games", "indie-games"], "unknown", { era: "modern" }),
+  g("Haunted PS1 Demo Disc 2020", 2020, ["horror-games", "indie-games", "free-games"], "free", { aliases: ["Haunted PS1 Demo Disc"], accessNote: "Free Windows download on itch.io: 17 short PS1-style horror demos." }),
   g("Cry of Fear", 2013, ["horror-games", "fan-projects"], "free", { accessNote: "Released free on Steam as a standalone game." }),
   g("Doki Doki Literature Club", 2017, ["horror-games", "bizarre-games"], "free", { accessNote: "The original is free on Steam (the Plus edition is paid)." }),
   // ------------------------------------------------ legitimately free games and fan projects
