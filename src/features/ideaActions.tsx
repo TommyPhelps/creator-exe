@@ -249,7 +249,7 @@ export function IdeaCard(props: {
         <Chip title={`Roughly how long it takes to capture (${TIME_LABEL[d.time].toLowerCase()}), not how long the video is`}>{CAPTURE_LABEL[d.time]}</Chip>
         <Chip>{d.recording.map((r) => REC_LABEL[r]).join(" + ")}</Chip>
         {d.format === "short" ? <Chip>Short</Chip> : d.format === "either" ? <Chip>Long or Short</Chip> : null}
-        {d.series ? <Chip>Series potential</Chip> : null}
+        {d.series && d.destination !== "twitch" ? <Chip>Series potential</Chip> : null}
       </div>
 
       {props.tonight && d.tonight ? (
@@ -266,7 +266,7 @@ export function IdeaCard(props: {
           <dd>
             <b>{d.tonight.firstFive}</b>
           </dd>
-          {d.tonight.minimumVideo ? (
+          {d.tonight.minimumVideo && d.destination !== "twitch" ? (
             <>
               <dt>Smallest video</dt>
               <dd>{d.tonight.minimumVideo}</dd>

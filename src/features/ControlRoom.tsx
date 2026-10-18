@@ -93,7 +93,7 @@ export function ControlRoom() {
     let alive = true;
     (async () => {
       const ctx = await loadCreatorContext(db);
-      const r = generateIdeas({ ...settings.generator, mode: "standard" }, ctx, { count: 3, focus: settings.contentFocus });
+      const r = generateIdeas({ ...settings.generator, mode: "standard", streamMode: null }, ctx, { count: 3, focus: settings.contentFocus });
       if (!alive) return;
       setIdeas(r.ideas);
       await recordImpressions(db, r.ideas.map((i) => i.key));

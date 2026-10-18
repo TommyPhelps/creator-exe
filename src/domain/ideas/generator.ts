@@ -1056,11 +1056,13 @@ export function generateIdeas(controls: GeneratorControls, ctx: CreatorContext, 
   let feedbackPicks = 0;
 
   const fits = (r: Scored, sameGameOk = false, anyType = false) => {
-    if (usedSeeds.has(r.c.seed.key)) return false;
+    // Asking for Casual Live means three different games to just stream: the same format is the point.
+    const casualAsked = r.c.reason === "casual-live" && controls.streamMode === "casual";
+    if (usedSeeds.has(r.c.seed.key) && !casualAsked) return false;
     if (!sameGameOk && r.c.groups.some((g) => usedGroups.has(g))) return false;
     if (r.c.reason === "casual-live" ? casualPicks >= casualCap : r.c.general && !sameGameOk && generalPicks >= generalCap) return false;
     if (!sameGameOk && r.c.gameNames.some((g) => !findCatalogGame(g)?.generic && usedGames.has(canon(g)))) return false;
-    if (!anyType && (usedTypes.get(r.c.videoType) ?? 0) >= typeCap) return false;
+    if (!anyType && !casualAsked && (usedTypes.get(r.c.videoType) ?? 0) >= typeCap) return false;
     return true;
   };
   const pickFor = (domain: Domain | null, novelty: boolean, only?: (r: Scored) => boolean, anyType = false): Scored | null => {

@@ -149,3 +149,12 @@ test("library refresh: one request at a time, misses remembered, stops after rep
   assert.ok(again.checked <= 3, "found and not-found games aren't fetched again");
   assert.ok(!calls.some((c) => !/store\.steampowered\.com/.test(c)), "only the Steam store is contacted");
 });
+
+test("Casual Live on request: three different games to just stream", () => {
+  for (const rng of [1, 2, 3]) {
+    const r = generateIdeas({ destination: "twitch", streamMode: "casual" }, emptyContext(), { count: 3, rng: mulberry32(rng) });
+    assert.equal(r.ideas.length, 3, `seed ${rng}`);
+    assert.ok(r.ideas.every((i) => i.details.reason === "casual-live"));
+    assert.equal(new Set(r.ideas.map((i) => i.games.join())).size, 3, "three different games");
+  }
+});
