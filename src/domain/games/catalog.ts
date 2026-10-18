@@ -88,7 +88,7 @@ export const GAME_CATALOG: CatalogGame[] = [
   g("The Longest Journey", 1999, ["adventure-games", "game-worlds"], "paid"),
   g("S.T.A.L.K.E.R.: Shadow of Chernobyl", 2007, ["survival-games", "game-worlds", "immersive-sims"], "paid", { aliases: ["STALKER Shadow of Chernobyl"] }),
   g("Pathologic", 2005, ["game-worlds", "bizarre-games", "survival-games"], "paid", { aliases: ["Pathologic Classic HD"] }),
-  g("Doom (shareware episode)", 1993, ["retro-pc-games", "game-history"], "free", { aliases: ["Doom"], accessNote: "The first episode, Knee-Deep in the Dead, was distributed free as shareware." }),
+  g("Doom", 1993, ["retro-pc-games", "game-history"], "free", { aliases: ["Doom (shareware episode)", "Doom (1993)", "The Ultimate Doom"], accessNote: "Only the first episode, Knee-Deep in the Dead, is free: it was shareware." }),
   // ------------------------------------------------ modern RPGs / worlds / mechanics
   g("The Witcher", 2007, ["rpg-classic", "game-worlds"], "paid", { aliases: ["The Witcher: Enhanced Edition"] }),
   g("The Elder Scrolls V: Skyrim", 2011, ["open-world-rpg", "game-mods"], "paid", { aliases: ["Skyrim", "Skyrim Special Edition", "Skyrim Anniversary Edition", "The Elder Scrolls V: Skyrim Special Edition"] }),

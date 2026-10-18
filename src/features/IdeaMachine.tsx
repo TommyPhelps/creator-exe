@@ -197,15 +197,15 @@ function Generate() {
               <Segmented value={controls.interest ?? null} options={INTEREST} onChange={(v) => set({ interest: v })} allowNone label="Interest" />
               {controls.interest ? <span className="dim small">{INTEREST.find((i) => i.id === controls.interest)?.hint}</span> : null}
             </div>
-            <span className="label">Inspired by games</span>
+            <span className="label" title="Name one or more games: the batch is built around them, with different kinds of video for each">Build around games</span>
             <input
               className="input"
               value={inspiration}
-              placeholder="optional: e.g. Elden Ring, Thief, Minecraft modpacks"
+              placeholder="optional: e.g. Warband, modded Skyrim, Minecraft modpacks (several different videos for each)"
               onChange={(e) => setInspiration(e.target.value)}
               onBlur={() => set({ inspiration: inspiration.split(/[,;\n]/).map((x) => x.trim()).filter(Boolean) })}
               onKeyDown={(e) => e.key === "Enter" && void run()}
-              aria-label="Games to use as inspiration"
+              aria-label="Games to build the batch around"
             />
             <span className="label">Curious about</span>
             <input

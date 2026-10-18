@@ -84,6 +84,10 @@ export interface IdeaSeed {
   moments?: string[];
   /** Optional pointers to visual situations. Never jokes: whether and how they're funny is up to you. */
   visualBeats?: string[];
+  /** A neutral format used only for games CREATOR.EXE has no notes on ({game} is whatever you typed). */
+  anyGame?: boolean;
+  /** "played": only when your library or memory shows you've played the game. First playthroughs are "unplayed" automatically. */
+  when?: "played" | "unplayed";
 }
 
 /** The hand-writable detail fields, also used to add specifics to one variant of a template. */

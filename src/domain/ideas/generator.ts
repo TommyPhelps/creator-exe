@@ -30,12 +30,13 @@ import type {
   TonightPlan,
 } from "../types.ts";
 import { IDEA_LIBRARY, type IdeaSeed, type SeedDetail } from "./library.ts";
-import { FOCUS_GAMES, HAND_DETAILS } from "./libraryGames.ts";
+import { ANY_GAME_FORMATS, FOCUS_GAMES, HAND_DETAILS } from "./libraryGames.ts";
+import { parseRequests, type GameRequest } from "./request.ts";
 import { adjacentTo, subjectDomain, subjectLabel, subjectsForText, type Domain } from "./subjects.ts";
 import { DEFAULT_FOCUS, allocateDomains, isExploring, presetFocus, share, type ContentFocus } from "./focus.ts";
 import { videoTypeLabel, videoTypeStyle, type VideoType } from "./videoTypes.ts";
 import { canon, catalogNames, findCatalogGame, type CatalogGame, type Era } from "../games/catalog.ts";
-import { accessFor, accessLabel, indexLibrary, noPurchaseNeeded, type AccessStatus, type LibraryIndex } from "../games/library.ts";
+import { accessFor, accessLabel, findInLibrary, indexLibrary, noPurchaseNeeded, type AccessStatus, type LibraryIndex } from "../games/library.ts";
 
 export type InterestMode = "familiar" | "adjacent" | "new" | "surprise";
 export type GenMode = "standard" | "tonight" | "zero-budget" | "deep-dive" | "one-off" | "series" | "random" | "curiosity";
@@ -268,7 +269,11 @@ export function domainOfKey(key: string): Domain {
 
 function fill(text: string, c: Candidate): string {
   if (!c.seed.variants || c.variant === null) return text;
-  return text.split(`{${c.seed.variants.slot}}`).join(c.variant);
+  const slot = `{${c.seed.variants.slot}}`;
+  // "Outer Wilds's" -> "Outer Wilds'"
+  const v = c.variant;
+  const out = /s$/i.test(v) ? text.split(`${slot}'s`).join(`${v}'`) : text;
+  return out.split(slot).join(v);
 }
 
 function derivedTonight(seed: IdeaSeed, c: Candidate): TonightPlan {
@@ -365,7 +370,8 @@ export const REACTION_WEIGHTS: Record<Reaction, Weights> = {
   not_in_mood: { seed: -0.3 },
   already_done: {},
   like_game: { game: 2, subj: 0.3 },
-  like_format: { type: 2 },
+  // Liking a format nudges it; it doesn't turn the channel into that format.
+  like_format: { type: 1.2 },
   like_topic: { subj: 1.2, game: 0.8, seed: -1 },
   more_like: { subj: 0.8, type: 0.8, game: 0.3 },
   less_like: { seed: -1.5, type: -0.5, subj: -0.3 },
@@ -452,6 +458,8 @@ interface Scored {
   factors: Factor[];
   enjoymentSignal: number | null;
   novelty: boolean;
+  /** How much of the score came from learned (positive) feedback. */
+  learnedBoost: number;
 }
 
 export interface GenerateOptions {
@@ -484,11 +492,32 @@ export function generateIdeas(controls: GeneratorControls, ctx: CreatorContext, 
   for (const name of ctx.favoriteGames) for (const s of findCatalogGame(name)?.genres ?? []) knownSubjects.add(s);
   const adjacent = adjacentTo(knownSubjects);
   const inspiration = (controls.inspiration ?? []).map((n) => n.trim()).filter(Boolean);
-  const inspirationCanon = new Set(inspiration.flatMap((n) => {
-    const cat = findCatalogGame(n);
-    return cat ? catalogNames(cat) : [canon(n)];
-  }));
-  const inspirationGenres = new Set(inspiration.flatMap((n) => findCatalogGame(n)?.genres ?? []));
+  const requests: GameRequest[] = parseRequests(inspiration);
+  const inspirationCanon = new Set(requests.flatMap((r) => [...r.names]));
+  const inspirationGenres = new Set(requests.flatMap((r) => r.catalog?.genres ?? []));
+  const MODSY = new Set(["game-mods", "modpacks", "fan-projects"]);
+  // The idea itself is about mods (not merely a game that has mods).
+  const moddy = (c: Candidate) => c.seed.setup === "mods" || c.seed.subjects.some((x) => MODSY.has(x)) || c.catalog.some((g) => !!g?.requires);
+  const matchesRequest = (c: Candidate, r: GameRequest) => {
+    const names = c.catalog.flatMap((cat, i) => (cat ? catalogNames(cat) : [canon(c.gameNames[i] ?? "")]));
+    return names.some((n) => r.names.has(n)) && (!r.mods || moddy(c));
+  };
+  // Games CREATOR.EXE has no notes on: offer neutral formats with your game slotted in, and say so.
+  for (const r of requests.filter((x) => x.unknown)) {
+    for (const seed of ANY_GAME_FORMATS) all.push(candidateFor(seed, r.title));
+    notes.push(`CREATOR.EXE has no notes on "${r.title}" yet, so its ideas are general formats with nothing claimed about the game itself.`);
+  }
+  // Have you played it? Library playtime (2+ hours), a rating, favourite or status counts.
+  const playedNames = new Set(ctx.playedGames);
+  const playedHours = (c: Candidate): number | null => {
+    for (const [i, cat] of c.catalog.entries()) {
+      const hit = findInLibrary(lib, cat ? catalogNames(cat) : [canon(c.gameNames[i] ?? "")]);
+      if (hit && playedNames.has(hit.canon)) return (hit.playtimeMin ?? 0) / 60;
+    }
+    return null;
+  };
+  const wasPlayed = (c: Candidate) => playedHours(c) !== null || c.catalog.some((cat, i) => (cat ? catalogNames(cat) : [canon(c.gameNames[i] ?? "")]).some((n) => playedNames.has(n)));
+  const skippedFirstTime = new Set<string>();
   const curiosityText = (controls.curiosity ?? "").trim();
   const curiositySubjects = new Set(subjectsForText([curiosityText, ...ctx.currentInterests].join(" ")));
   const curiosityWords = new Set(words(curiosityText).filter((w) => w.length > 3));
@@ -535,6 +564,13 @@ export function generateIdeas(controls: GeneratorControls, ctx: CreatorContext, 
       continue;
     }
     if (mode === "tonight" && access.kind === "not_owned") continue;
+    // A "first time" video about a game you've already played isn't honest; a return visit needs that you have.
+    const played = c.gameNames.length > 0 && wasPlayed(c);
+    if (played && (c.videoType === "first-playthrough" || s.when === "unplayed")) {
+      skippedFirstTime.add(c.gameNames[0] ?? "");
+      continue;
+    }
+    if (s.when === "played" && !played) continue;
     if (avoid.length) {
       const text = `${fill(s.title, c)} ${fill(s.premise, c)} ${c.subjects.map(subjectLabel).join(" ")} ${c.gameNames.join(" ")}`.toLowerCase();
       if (avoid.some((a) => text.includes(a))) continue;
@@ -546,6 +582,10 @@ export function generateIdeas(controls: GeneratorControls, ctx: CreatorContext, 
       if (!sharesType && !sharesSubject) continue;
     }
     gated.push({ c, access });
+  }
+  for (const r of requests) {
+    const hit = [...skippedFirstTime].find((g) => r.names.has(canon(g)) || (findCatalogGame(g) && catalogNames(findCatalogGame(g)!).some((n) => r.names.has(n))));
+    if (hit) notes.push(`Your library shows you've played ${hit}, so no "first time" ideas for it.`);
   }
   if (zeroBudget && needsPurchase && !libraryImported) {
     notes.push("Zero budget only shows free games and ideas that need no game. Import your game library (Creator Memory) to include games you already own.");
@@ -679,14 +719,20 @@ export function generateIdeas(controls: GeneratorControls, ctx: CreatorContext, 
       enjoyEvidence++;
     }
 
-    if (c.hand && c.gameNames.length) add(1, `Written specifically for ${mainGame}`);
+    if (c.hand && c.gameNames.length) add(1, c.gameNames.length > 1 ? "Written specifically for these games" : `Written specifically for ${mainGame}`);
+    if (s.anyGame) factors.push({ text: `A general format: no notes on ${mainGame} yet`, effect: "note" });
+    if (c.videoType === "revisit" && mainGame && wasPlayed(c)) {
+      const h = playedHours(c);
+      add(1.5, h && h >= 1 ? `You've played ${mainGame} (${Math.round(h)} h in your library)` : `You've played ${mainGame} before`);
+    }
 
     // Your games.
     if (access.kind === "owned" && access.via === "library") add(1, `${mainGame} is in your library`);
     if (access.kind === "free") add(0.5, "The game is free");
     if (access.kind === "not_owned" && controls.access !== "buy") add(-1, `You'd need to buy ${mainGame}`);
     if (inspirationCanon.size) {
-      if (gameCanon.some((n) => inspirationCanon.has(n))) add(4, `Uses ${mainGame}, which you asked for`);
+      const askedFor = c.catalog.findIndex((cat, i) => (cat ? catalogNames(cat) : [canon(c.gameNames[i] ?? "")]).some((n) => inspirationCanon.has(n)));
+      if (askedFor >= 0) add(4, `Uses ${c.gameNames[askedFor]}, which you asked for`);
       else {
         const g = c.subjects.filter((x) => inspirationGenres.has(x));
         if (g.length) add(2, `Shares ${g.map(subjectLabel).slice(0, 2).join(", ")} with your inspiration games`);
@@ -777,15 +823,12 @@ export function generateIdeas(controls: GeneratorControls, ctx: CreatorContext, 
 
     // Small jitter so repeated runs feel different.
     score += rng() * 1.2;
-    return { c, access, score, factors, enjoymentSignal: enjoyEvidence ? enjoy / enjoyEvidence : null, novelty: false };
+    return { c, access, score, factors, enjoymentSignal: enjoyEvidence ? enjoy / enjoyEvidence : null, novelty: false, learnedBoost: learnedPlus };
   });
 
   scored.sort((a, b) => b.score - a.score);
 
   // ---------------------------------------------------------------- 5. domain slots + diverse selection
-  const available: Record<Domain, number> = { gaming: 0, "gaming-tech": 0, other: 0 };
-  for (const x of scored) available[x.c.domain]++;
-  const slots = allocateDomains(focus, count, recentDomains, available, rng);
   const chosen: Scored[] = [];
   const usedSeeds = new Set<string>();
   const usedGames = new Set<string>();
@@ -793,23 +836,28 @@ export function generateIdeas(controls: GeneratorControls, ctx: CreatorContext, 
   const usedPrimary = new Map<string, number>();
   const typeCap = count <= 3 ? 1 : count <= 6 ? 2 : Infinity;
   const remaining = [...scored];
-  const wantNovelty = count >= 3 && !opts.likeThis && !controls.interest && mode !== "random";
+  const wantNovelty = count >= 3 && !opts.likeThis && !controls.interest && mode !== "random" && requests.length === 0;
+  // Feedback steers, it doesn't take over: at most a third of a batch may be won by learned likes.
+  const feedbackQuota = Math.ceil(count / 3);
+  let feedbackPicks = 0;
 
-  const fits = (r: Scored) => {
+  const fits = (r: Scored, sameGameOk = false, anyType = false) => {
     if (usedSeeds.has(r.c.seed.key)) return false;
-    if (r.c.gameNames.some((g) => !findCatalogGame(g)?.generic && usedGames.has(canon(g)))) return false;
-    if ((usedTypes.get(r.c.videoType) ?? 0) >= typeCap) return false;
+    if (!sameGameOk && r.c.gameNames.some((g) => !findCatalogGame(g)?.generic && usedGames.has(canon(g)))) return false;
+    if (!anyType && (usedTypes.get(r.c.videoType) ?? 0) >= typeCap) return false;
     return true;
   };
-  const pickFor = (domain: Domain | null, novelty: boolean): Scored | null => {
+  const pickFor = (domain: Domain | null, novelty: boolean, only?: (r: Scored) => boolean, anyType = false): Scored | null => {
     let bestIdx = -1;
     let bestVal = -Infinity;
+    const quotaFull = feedbackPicks >= feedbackQuota;
     for (let i = 0; i < remaining.length; i++) {
       const r = remaining[i];
-      if (!r || (domain && r.c.domain !== domain) || !fits(r)) continue;
+      if (!r || (domain && r.c.domain !== domain)) continue;
+      if (only ? !only(r) || !fits(r, true, anyType) : !fits(r)) continue;
       const overlap = chosen.reduce((n, ch) => n + r.c.subjects.filter((x) => ch.c.subjects.includes(x)).length, 0);
       const primary = r.c.subjects[0] ?? "";
-      let val = r.score - overlap * 1.5 - (usedPrimary.get(primary) ?? 0) * 2;
+      let val = r.score - overlap * 1.5 - (usedPrimary.get(primary) ?? 0) * 2 - (quotaFull ? r.learnedBoost : 0);
       if (novelty) {
         const fresh = !gameKnown(r.c) && !r.c.subjects.some((x) => knownSubjects.has(x)) && !r.factors.some((f) => f.text.startsWith("Similar") || f.text.startsWith("You like"));
         val += fresh ? 3 : -2;
@@ -821,8 +869,57 @@ export function generateIdeas(controls: GeneratorControls, ctx: CreatorContext, 
     }
     if (bestIdx < 0) return null;
     const [pick] = remaining.splice(bestIdx, 1);
+    if (pick && !quotaFull && pick.learnedBoost >= 1) feedbackPicks++;
     return pick ?? null;
   };
+  const take = (pick: Scored) => {
+    chosen.push(pick);
+    usedSeeds.add(pick.c.seed.key);
+    for (const g of pick.c.gameNames) if (!findCatalogGame(g)?.generic) usedGames.add(canon(g));
+    usedTypes.set(pick.c.videoType, (usedTypes.get(pick.c.videoType) ?? 0) + 1);
+    const primary = pick.c.subjects[0] ?? "";
+    usedPrimary.set(primary, (usedPrimary.get(primary) ?? 0) + 1);
+  };
+
+  // Games you asked for come first: several different videos about each one,
+  // taking turns when you named more than one.
+  if (requests.length) {
+    const open = new Set(requests.map((_, i) => i));
+    const got = requests.map(() => 0);
+    const ranOut = new Set<number>();
+    while (chosen.length < count && open.size) {
+      for (const i of [...open]) {
+        if (chosen.length >= count) break;
+        const r = requests[i]!;
+        // Ideas about just this game, different kinds of video first; the same kind twice,
+        // or a tour of several games, only if that's all there is.
+        const solo = (x: Scored) => matchesRequest(x.c, r) && x.c.gameNames.length === 1;
+        const any = (x: Scored) => matchesRequest(x.c, r);
+        const pick = pickFor(null, false, solo) ?? pickFor(null, false, solo, true) ?? pickFor(null, false, any) ?? pickFor(null, false, any, true);
+        if (!pick) {
+          open.delete(i);
+          ranOut.add(i);
+          continue;
+        }
+        take(pick);
+        got[i] = (got[i] ?? 0) + 1;
+      }
+    }
+    requests.forEach((r, i) => {
+      const n = got[i] ?? 0;
+      if (ranOut.has(i) && n < Math.ceil(count / requests.length)) {
+        notes.push(
+          n === 0
+            ? `No ideas fit ${r.mods ? `${r.title} with mods` : r.title} with these settings${r.unknown ? "" : "; the batch is filled with related ideas"}.`
+            : `Only ${n} ${r.mods ? `${r.title} mod` : r.title} idea${n === 1 ? "" : "s"} fit${n === 1 ? "s" : ""} right now; the rest are related.`,
+        );
+      }
+    });
+  }
+
+  const available: Record<Domain, number> = { gaming: 0, "gaming-tech": 0, other: 0 };
+  for (const x of remaining) available[x.c.domain]++;
+  const slots = count > chosen.length ? allocateDomains(focus, count - chosen.length, recentDomains, available, rng) : [];
   let fellBack = false;
   slots.forEach((domain, i) => {
     const novelty = wantNovelty && i === slots.length - 1;
@@ -835,12 +932,7 @@ export function generateIdeas(controls: GeneratorControls, ctx: CreatorContext, 
     if (!pick) return;
     pick.novelty = novelty && !gameKnown(pick.c) && !pick.c.subjects.some((x) => knownSubjects.has(x));
     if (pick.novelty) pick.factors.push({ text: "Something new for you, to keep suggestions from narrowing", effect: "note" });
-    chosen.push(pick);
-    usedSeeds.add(pick.c.seed.key);
-    for (const g of pick.c.gameNames) if (!findCatalogGame(g)?.generic) usedGames.add(canon(g));
-    usedTypes.set(pick.c.videoType, (usedTypes.get(pick.c.videoType) ?? 0) + 1);
-    const primary = pick.c.subjects[0] ?? "";
-    usedPrimary.set(primary, (usedPrimary.get(primary) ?? 0) + 1);
+    take(pick);
   });
   if (fellBack) notes.push("Not enough ideas fit one part of your Content Focus with these filters, so the batch was filled from the other part you allow.");
   if (isExploring(focus)) notes.push(controls.explore ? "Exploring outside your niche for this batch: ideas outside gaming are included on purpose." : `Your Content Focus includes ${focus.other}% ideas outside gaming.`);
