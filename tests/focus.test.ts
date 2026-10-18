@@ -407,7 +407,7 @@ test("schema v1 -> v2 keeps every row, adds defaults, and old backups still rest
 
   const report = await migrate(db);
   assert.equal(report.from, 1);
-  assert.equal(report.to, 2);
+  assert.equal(report.to, 3, "v2 plus the v3 repair");
   const profile = await repo.listProfile(db);
   assert.equal(profile.length, 2);
   assert.ok(profile.every((p) => p.scope === "channel"), "existing entries default to channel until the upgrade step");

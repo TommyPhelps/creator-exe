@@ -26,6 +26,7 @@ export async function migrate(db: Db, migrations: Migration[] = MIGRATIONS): Pro
   const applied: string[] = [];
   for (const m of [...migrations].sort((a, b) => a.version - b.version)) {
     if (m.version <= from) continue;
+    const details = m.run ? await m.run(db) : [];
     await db.batch([
       ...m.statements.map((sql) => ({ sql })),
       {
@@ -33,7 +34,7 @@ export async function migrate(db: Db, migrations: Migration[] = MIGRATIONS): Pro
         params: [m.version, m.name, new Date().toISOString()],
       },
     ]);
-    applied.push(`${m.version}: ${m.name}`);
+    applied.push(`${m.version}: ${m.name}${details.length ? ` (${details.join(", ")})` : ""}`);
   }
   return { from, to: Math.max(from, latest), applied };
 }

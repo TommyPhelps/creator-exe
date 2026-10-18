@@ -883,12 +883,12 @@ const RAW_GENERAL: IdeaSeed[] = [
     subjects: ["observational", "retro-computing", "real-world-challenges"],
     originality: "well-trodden",
   },
-  // ------------------------------------------------------------ productivity / notion (channel's current description)
+  // ------------------------------------------------------------ productivity systems (the channel's old Notion era; outside gaming)
   {
     key: "retro-productivity-system",
     title: "Running my life with a 1990s organizer program",
     premise: "Swap modern productivity apps for a vintage personal information manager for a week and see if it holds up.",
-    why: "Connects the productivity-system theme from your channel description with retro software.",
+    why: "Connects productivity systems (a past direction of the channel) with retro software.",
     whatYouDo: "Install a period organizer in a VM, plan a real week in it, compare to your modern tools.",
     worthExploring: "Many 'new' productivity ideas existed decades ago.",
     audience: "Productivity enthusiasts and retro fans; an unusual crossover.",
@@ -910,7 +910,7 @@ const RAW_GENERAL: IdeaSeed[] = [
     key: "build-a-system-video",
     title: "Building my {system} from scratch, start to finish",
     premise: "Design and build a real {system} on screen, explaining each decision as you make it.",
-    why: "Matches what your channel description says you do, so it is a natural restart if that still interests you.",
+    why: "The channel once leaned into Notion systems; a build video is an easy restart if that still interests you.",
     whatYouDo: "Screen-record the build, keep explanations short, share the finished template if you want.",
     worthExploring: "Seeing the reasoning behind a system is more useful than seeing a finished template.",
     audience: "People searching for how to build a similar system.",

@@ -1,27 +1,38 @@
-# Channel notes — @TamsterCo (Phase 0)
+# Channel notes: Tamster
 
-Recorded 2026-10-17. Every line says where it came from.
+Updated 2026-10-17. Every line says where it came from. The live, editable copy of the
+channel identity is in the app: **Channel DNA → Your channel**.
 
-| Fact | Source |
+## Current identity (source: Tommy, 2026-10-17, issue #1)
+
+| | |
 |---|---|
-| Channel ID `UCGnpORs6LGRRb1b7y39wumw` belongs to `@TamsterCo` | Public channel page (fetched) and the brief |
-| Name "Tamster"; 45 subscribers; 37 videos | Screenshot Tommy shared of his channel page |
-| Description: "I am an up and coming Notion creator redefining the space with beautiful systems." Link: tamsterco.gumroad.com. Banner: "TAMSTER — Build smarter with Notion", "Get My Budgeting System" | Same screenshot |
-| Visible uploads (all ~4 years old): "I tried to eat all the food in Minecraft! It was a nightmare." (16:54, 19 views); "Project Zomboid but I'm a Pacifist" (13:33, 337 views); "I played Valorant for the FIRST TIME in 2021" (12:19, 8 views); "Night Factory is TERRIFYING \| Escap…" (18 views) | Same screenshot |
+| Channel ID | `UCGnpORs6LGRRb1b7y39wumw` (stable; display names and handles change) |
+| Name | Tamster |
+| Avatar | Gray meme cat with red laser eyes, made by Tommy |
+| Banner | Pink-tinted retro collage: cats, a small vintage computer, and a Windows-style TAMSTER / LOW QUALITY GAMING VIDEOS dialog box, made by Tommy |
+| Look | Old YouTube / Y2K handmade, slightly chaotic meme look. Not MrBeast-style packaging, not glossy or corporate. Graphics are hand-made, not AI-generated |
 
-## What could not be gathered here
+Channel description, exactly as written:
 
-YouTube's feed and pages were not reachable from the build environment (the feed is
-robots-restricted for automated fetchers and outbound connections to youtube.com were
-refused). So no full video list, descriptions or thumbnails were pulled at build time, and none
-are bundled or invented. The installed app fetches them on your PC through
-**Channel DNA → Import & data**, where every number is labelled with its source.
+> Just a guy who likes games, old computers, and weird shit.
+>
+> I mostly do gaming videos with the occasional tech stuff thrown in.
+>
+> My videos are never on schedule and always low quality :)
 
-## Hypotheses (not evidence)
+"Low quality" is self-deprecation, not a request to make worse videos. "Never on schedule"
+is why CREATOR.EXE has no deadlines or publishing schedule.
 
-- The uploads visible in the screenshot are gaming videos with a self-imposed-rule or
-  first-impression angle (pacifist run, eat every food, first time playing). That's a format
-  observation from titles only; it says nothing about editing or humour.
-- The channel description and banner were later changed to Notion/productivity systems, which
-  suggests a pivot that may or may not still interest you. The idea library has a couple of
-  productivity-system ideas for that reason; delete or "Not interested" them if it's done.
+## History
+
+| When | What | Source |
+|---|---|---|
+| ~2021-2022 | Gaming uploads, e.g. "I tried to eat all the food in Minecraft! It was a nightmare.", "Project Zomboid but I'm a Pacifist", "I played Valorant for the FIRST TIME in 2021", "Night Factory is TERRIFYING" | Screenshot of the channel page |
+| Before Oct 2026 | Description and banner were about Notion systems ("Build smarter with Notion", Gumroad link). No longer current. | Same screenshot |
+| 2026-10-17 | Rebranded as above: gaming first, occasional tech | Tommy (issue #1) |
+
+## What the app does not claim
+
+Nothing here comes from watching the videos. Channel DNA labels come from titles and
+descriptions, with confidence levels, and say "unknown" when the evidence is thin.

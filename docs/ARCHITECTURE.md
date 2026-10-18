@@ -50,7 +50,7 @@ that interface, so the same code runs inside the Windows app (`tauri.ts`) and in
 a real SQLite database (`tests/helpers/sqliteDb.ts`). A plain browser cannot open the app's
 database and gets a clear boot error instead of fake data.
 
-## Data model (schema v2)
+## Data model (schema v3)
 
 | Table | Holds |
 |---|---|
@@ -66,6 +66,8 @@ database and gets a clear boot error instead of fake data.
 | `title_candidates` / `packages` | Title Lab candidates and versioned upload packages |
 | `games` | Your imported game library (v2): title, ownership, playtime, Steam app ID, tags, source file |
 | `game_info` | Cached Steam store lookups (v2): matched name, cover URL, free flag, price text, date checked |
+
+v3 (v0.1.2) is a repair step, not new data: two different "v2" layouts shipped (v0.1.1's, and the 0.2.0 Phase 2 preview's `video_forensics` table). v3 adds whatever either is missing, with `CREATE TABLE IF NOT EXISTS` and column checks, so every database ends up with both and nothing is dropped. Phase 2 features will use v4+.
 
 v2 also added `profile_items.scope` (channel / personal / watching), `videos.user_subjects` (your own topics) and `idea_feedback.detail` (what a reaction was about).
 

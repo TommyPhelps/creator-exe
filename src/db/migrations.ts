@@ -1,10 +1,99 @@
 // Versioned schema migrations. Never edit a migration that has shipped:
 // add a new one instead so existing user databases upgrade in place.
 
+import type { Db } from "../platform/types.ts";
+
 export interface Migration {
   version: number;
   name: string;
   statements: string[];
+  /** Programmatic step for changes that depend on what is already there. Must be idempotent. */
+  run?: (db: Db) => Promise<string[]>;
+}
+
+/**
+ * The two different "schema v2" layouts that shipped:
+ * - v0.1.1 (release): games, game_info, profile_items.scope, videos.user_subjects, idea_feedback.detail
+ * - 0.2.0 Phase 2 dev preview: video_forensics
+ * v3 makes any database contain both, without dropping or rewriting anything.
+ */
+const V011_COLUMNS: { table: string; column: string; ddl: string }[] = [
+  { table: "profile_items", column: "scope", ddl: "ALTER TABLE profile_items ADD COLUMN scope TEXT NOT NULL DEFAULT 'channel'" },
+  { table: "videos", column: "user_subjects", ddl: "ALTER TABLE videos ADD COLUMN user_subjects TEXT NOT NULL DEFAULT '[]'" },
+  { table: "idea_feedback", column: "detail", ddl: "ALTER TABLE idea_feedback ADD COLUMN detail TEXT NOT NULL DEFAULT '{}'" },
+];
+
+const V011_TABLES = [
+  `CREATE TABLE IF NOT EXISTS games (
+    canon TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    platform TEXT NOT NULL DEFAULT 'PC',
+    ownership TEXT NOT NULL DEFAULT 'unknown',
+    status TEXT,
+    rating INTEGER,
+    favorite INTEGER NOT NULL DEFAULT 0,
+    playtime_min INTEGER,
+    steam_app_id INTEGER,
+    release_year INTEGER,
+    tags TEXT NOT NULL DEFAULT '[]',
+    source TEXT NOT NULL,
+    imported_at TEXT NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS game_info (
+    canon TEXT PRIMARY KEY,
+    query TEXT NOT NULL,
+    status TEXT NOT NULL,
+    steam_app_id INTEGER,
+    steam_name TEXT,
+    image_url TEXT,
+    is_free INTEGER,
+    price_text TEXT,
+    source TEXT NOT NULL,
+    checked_at TEXT NOT NULL
+  )`,
+];
+
+/** The 0.2.0 preview's table, kept (with any data in it) for a later Phase 2 release. */
+const PHASE2_TABLE = `CREATE TABLE IF NOT EXISTS video_forensics (
+    video_id TEXT PRIMARY KEY REFERENCES videos(id) ON DELETE CASCADE,
+    media_json TEXT NOT NULL DEFAULT 'null',
+    transcript_json TEXT NOT NULL DEFAULT 'null',
+    transcript_filename TEXT NOT NULL DEFAULT '',
+    thumbnail_palette TEXT NOT NULL DEFAULT '[]',
+    thumbnail_filename TEXT NOT NULL DEFAULT '',
+    creator_notes TEXT NOT NULL DEFAULT '',
+    creator_tags TEXT NOT NULL DEFAULT '[]',
+    updated_at TEXT NOT NULL
+  )`;
+
+async function columnNames(db: Db, table: string): Promise<Set<string>> {
+  const rows = await db.select<{ name: string }>(`SELECT name FROM pragma_table_info('${table}')`);
+  return new Set(rows.map((r) => r.name));
+}
+
+async function tableNames(db: Db): Promise<Set<string>> {
+  const rows = await db.select<{ name: string }>("SELECT name FROM sqlite_master WHERE type = 'table'");
+  return new Set(rows.map((r) => r.name));
+}
+
+/** Adds whatever either v2 layout is missing. Never drops, renames or rewrites existing rows. */
+export async function convergeSchema(db: Db): Promise<string[]> {
+  const done: string[] = [];
+  const before = await tableNames(db);
+  for (const ddl of [...V011_TABLES, PHASE2_TABLE]) {
+    const name = /IF NOT EXISTS (\w+)/.exec(ddl)?.[1] ?? "";
+    if (!before.has(name)) {
+      await db.execute(ddl);
+      done.push(`added table ${name}`);
+    }
+  }
+  for (const c of V011_COLUMNS) {
+    if (!(await columnNames(db, c.table)).has(c.column)) {
+      await db.execute(c.ddl);
+      done.push(`added ${c.table}.${c.column}`);
+    }
+  }
+  return done;
 }
 
 export const MIGRATIONS: Migration[] = [
@@ -208,6 +297,12 @@ export const MIGRATIONS: Migration[] = [
       )`,
     ],
   },
+  {
+    version: 3,
+    name: "repair: merge both schema v2 layouts (v0.1.1 release and 0.2.0 preview)",
+    statements: [],
+    run: convergeSchema,
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1]?.version ?? 0;
@@ -231,6 +326,7 @@ export const BACKUP_TABLES = [
   "packages",
   "games",
   "game_info",
+  "video_forensics",
 ] as const;
 
 export type BackupTable = (typeof BACKUP_TABLES)[number];

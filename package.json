@@ -1,7 +1,7 @@
 {
   "name": "creator-exe",
   "private": true,
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "CREATOR.EXE - a personal YouTube creative workstation for Windows",
   "type": "module",
   "engines": {

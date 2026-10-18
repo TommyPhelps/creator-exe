@@ -20,6 +20,8 @@ export interface AppSettings {
   density: Density;
   textScale: number;
   channelInput: string;
+  /** Creator-owned branding, written by you. Never replaced by imported YouTube data. (Same key and shape as the 0.2.0 preview.) */
+  channelIdentity: ChannelIdentity;
   projectRoot: string;
   folderTemplate: string[];
   editorPath: string;
@@ -36,11 +38,29 @@ export interface AppSettings {
   v011Upgraded: boolean;
 }
 
+export interface ChannelIdentity {
+  displayName: string;
+  description: string;
+  avatarNote: string;
+  bannerNote: string;
+  visualStyle: string;
+}
+
+/** Tamster's channel as Tommy described it on 2026-10-17 (issue #1). The description is kept exactly as written. */
+export const TAMSTER_IDENTITY: ChannelIdentity = {
+  displayName: "Tamster",
+  description: "Just a guy who likes games, old computers, and weird shit.\n\nI mostly do gaming videos with the occasional tech stuff thrown in.\n\nMy videos are never on schedule and always low quality :)",
+  avatarNote: "Gray meme cat with red laser eyes (made by me)",
+  bannerNote: "Pink-tinted retro collage: cats, a small vintage computer, and a Windows-style TAMSTER / LOW QUALITY GAMING VIDEOS dialog box (made by me)",
+  visualStyle: "Old YouTube / Y2K handmade, slightly chaotic meme look. Not MrBeast-style packaging, not glossy or corporate. Graphics are made by hand, not AI-generated.",
+};
+
 export const DEFAULT_SETTINGS: AppSettings = {
   theme: "midnight-2003",
   density: "comfortable",
   textScale: 1,
   channelInput: "UCGnpORs6LGRRb1b7y39wumw",
+  channelIdentity: TAMSTER_IDENTITY,
   projectRoot: "",
   folderTemplate: ["Research", "Recordings", "Audio", "Images", "Thumbnails", "Assets", "Exports", "Notes"],
   editorPath: "",
@@ -57,7 +77,13 @@ export const SECRET_YOUTUBE_KEY = "youtube_api_key";
 
 export async function loadSettings(db: Db): Promise<AppSettings> {
   const stored = await getSetting<Partial<AppSettings>>(db, "app", {});
-  return { ...DEFAULT_SETTINGS, ...stored, generator: { ...(stored.generator ?? {}) }, contentFocus: normalizeFocus(stored.contentFocus ?? DEFAULT_FOCUS) };
+  return {
+    ...DEFAULT_SETTINGS,
+    ...stored,
+    channelIdentity: { ...TAMSTER_IDENTITY, ...(stored.channelIdentity ?? {}) },
+    generator: { ...(stored.generator ?? {}) },
+    contentFocus: normalizeFocus(stored.contentFocus ?? DEFAULT_FOCUS),
+  };
 }
 
 export async function saveSettings(db: Db, s: AppSettings): Promise<void> {

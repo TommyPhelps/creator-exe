@@ -409,3 +409,8 @@ ul.plain { margin: 0; padding-left: 18px; }
   [data-density="spacious"] { --base: 16.5px; }
   .ideas-grid { grid-template-columns: repeat(auto-fit, minmax(460px, 1fr)); }
 }
+
+/* ---------- v0.1.2 channel identity ---------- */
+.identity { display: grid; grid-template-columns: minmax(280px, 1fr) minmax(280px, 1.2fr); gap: 8px 24px; align-items: start; }
+.identity-desc { white-space: pre-wrap; margin: 0; font: calc(var(--base) + 1px)/1.5 var(--font-mono); color: var(--lcd); background: var(--lcd-bg); padding: 10px 12px; box-shadow: var(--sunken); }
+@media (max-width: 1100px) { .identity { grid-template-columns: 1fr; } }

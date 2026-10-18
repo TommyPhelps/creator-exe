@@ -8,7 +8,7 @@ import { applyMerge, extractVideoId, planMerge, type MergePlan } from "../domain
 import { summarizeChannel, type VideoReading } from "../domain/channel/analyze.ts";
 import { SUBJECTS, subjectLabel } from "../domain/ideas/subjects.ts";
 import type { ImportBatch } from "../domain/channel/types.ts";
-import { SECRET_YOUTUBE_KEY } from "../domain/settings.ts";
+import { SECRET_YOUTUBE_KEY, type ChannelIdentity } from "../domain/settings.ts";
 import { FEEDBACK_FLAGS, type EvidenceSource, type FeedbackFlag, type Video, type VideoFeedback } from "../domain/types.ts";
 import { formatDate, formatDuration, relativeTime } from "../lib/util.ts";
 import { Button, Check, Chip, Dialog, Empty, Field, Note, PageHead, Progress, Rating, Segmented, Select, Tabs, TextArea, TextInput, Win } from "../ui/kit.tsx";
@@ -457,6 +457,50 @@ export function ThumbImg({ src }: { src: string }) {
 
 type Sort = "newest" | "oldest" | "views" | "longest" | "loved";
 
+/** Your channel as you describe it. Written by you, kept exactly, never overwritten by imports. */
+function ChannelIdentityPanel() {
+  const { settings, updateSettings } = useApp();
+  const id = settings.channelIdentity;
+  const [editing, setEditing] = useState(false);
+  const set = (patch: Partial<ChannelIdentity>) => void updateSettings({ channelIdentity: { ...id, ...patch } });
+  return (
+    <Win
+      title={`YOUR CHANNEL :: ${id.displayName.toUpperCase() || "UNNAMED"}`}
+      icon="channel"
+      meta="written by you"
+      actions={
+        <Button size="small" onClick={() => setEditing(!editing)}>
+          {editing ? "Done" : "Edit"}
+        </Button>
+      }
+    >
+      {editing ? (
+        <div className="grid cols-2">
+          <Field label="Channel name">{(fid) => <TextInput id={fid} value={id.displayName} onCommit={(v) => set({ displayName: v })} />}</Field>
+          <Field label="Look & style">{(fid) => <TextInput id={fid} value={id.visualStyle} onCommit={(v) => set({ visualStyle: v })} />}</Field>
+          <Field label="Channel description (kept exactly as you type it)">{(fid) => <TextArea id={fid} value={id.description} rows={6} onCommit={(v) => set({ description: v })} />}</Field>
+          <div className="stack tight">
+            <Field label="Avatar">{(fid) => <TextInput id={fid} value={id.avatarNote} onCommit={(v) => set({ avatarNote: v })} />}</Field>
+            <Field label="Banner">{(fid) => <TextInput id={fid} value={id.bannerNote} onCommit={(v) => set({ bannerNote: v })} />}</Field>
+          </div>
+        </div>
+      ) : (
+        <div className="identity">
+          <p className="identity-desc selectable">{id.description}</p>
+          <dl className="kv small">
+            <dt>Avatar</dt>
+            <dd>{id.avatarNote}</dd>
+            <dt>Banner</dt>
+            <dd>{id.bannerNote}</dd>
+            <dt>Look</dt>
+            <dd>{id.visualStyle}</dd>
+          </dl>
+        </div>
+      )}
+    </Win>
+  );
+}
+
 export function ChannelDna() {
   const { db, confirm } = useApp();
   const act = useAction();
@@ -511,6 +555,7 @@ export function ChannelDna() {
         title="Your channel, with receipts"
         lede="Every pattern links to the videos and words that produced it. Labels come from simple keyword matches on titles and descriptions: nothing here has watched your videos."
       />
+      <ChannelIdentityPanel />
       <Tabs
         value={tab}
         tabs={[
