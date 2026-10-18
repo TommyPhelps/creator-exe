@@ -76,6 +76,7 @@ export function projectFromIdea(idea: Idea, opts: { tonight?: boolean; destinati
           smallestVideo: tonight?.minimumVideo ?? "",
           ifItGoesWell: tonight?.expansion ?? "",
           myNotes: idea.notes,
+          startFrom: d.startFrom ?? null,
           source: { ideaId: idea.id, ideaKey: idea.libraryKey, seedKey: idea.libraryKey ? (idea.libraryKey.split(":")[0] ?? null) : null, startedAt: new Date().toISOString() },
         }
       : { myNotes: idea.notes, hook: idea.premise, source: { ideaId: idea.id, ideaKey: idea.libraryKey, seedKey: null, startedAt: new Date().toISOString() } },

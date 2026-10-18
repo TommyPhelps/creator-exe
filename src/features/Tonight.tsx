@@ -4,7 +4,7 @@ import { listProjects, listTasks, recordImpressions } from "../db/repos.ts";
 import { PHASES, isUnfinished, phaseOf, suggestedNextAction } from "../domain/projects.ts";
 import { generateIdeas, type GeneratedIdea } from "../domain/ideas/generator.ts";
 import { loadCreatorContext } from "../domain/ideas/context.ts";
-import type { Energy, RecordingStyle, TimeBox } from "../domain/types.ts";
+import { DESTINATIONS, type Destination, type Energy, type RecordingStyle, type TimeBox } from "../domain/types.ts";
 import { Button, Note, PageHead, Segmented, Win } from "../ui/kit.tsx";
 import { IdeaCard, useIdeaActions } from "./ideaActions.tsx";
 
@@ -26,7 +26,8 @@ const REC = [
 ] as const;
 
 export function Tonight() {
-  const { db, toast, settings, go } = useApp();
+  const { db, toast, settings, go, updateSettings } = useApp();
+  const [destination, setDestination] = useState<Destination>(settings.generator.destination ?? "youtube");
   const inProgress = useData(async () => {
     const [projects, tasks] = await Promise.all([listProjects(db), listTasks(db)]);
     return projects
@@ -50,7 +51,7 @@ export function Tonight() {
     setBusy(true);
     (async () => {
       const ctx = await loadCreatorContext(db);
-      const r = generateIdeas({ mode: "tonight", time, energy, recording: rec }, ctx, { count: 3, focus: settings.contentFocus });
+      const r = generateIdeas({ mode: "tonight", time, energy, recording: rec, destination }, ctx, { count: 3, focus: settings.contentFocus });
       if (!alive) return;
       setIdeas(r.ideas);
       setNotes([...r.notes, ...(r.relaxed.length ? [`Loosened: ${r.relaxed.join(", ")}, to find three options.`] : [])]);
@@ -62,7 +63,7 @@ export function Tonight() {
     return () => {
       alive = false;
     };
-  }, [db, toast, time, energy, rec, seed, settings.contentFocus]);
+  }, [db, toast, time, energy, rec, seed, settings.contentFocus, destination]);
 
   const visible = ideas.filter((i) => !dismissed.has(i.key));
 
@@ -71,7 +72,11 @@ export function Tonight() {
       <PageHead
         sys="TONIGHT.EXE :: CREATIVE JUICE DETECTED"
         title="Make something tonight"
-        lede="Three small gaming ideas you can start right now, with games you have or that are free. Pick one and press START THIS VIDEO to get a ready-made project."
+        lede={
+          destination === "twitch"
+            ? "Three things you could stream tonight, with games you have or that are free. A stream can just be a stream."
+            : "Three small gaming ideas you can start right now, with games you have or that are free. Each one has a reason to exist beyond 'I played it'."
+        }
         actions={
           <Button icon="dice" onClick={() => setSeed((s) => s + 1)} disabled={busy}>
             Three different ideas
@@ -79,6 +84,17 @@ export function Tonight() {
         }
       />
       <div className="row">
+        <span className="label">Making</span>
+        <Segmented
+          value={destination}
+          options={DESTINATIONS}
+          onChange={(v) => {
+            const next = v ?? "youtube";
+            setDestination(next);
+            void updateSettings({ generator: { ...settings.generator, destination: next } });
+          }}
+          label="What you're making"
+        />
         <span className="label">Time</span>
         <Segmented value={time} options={TIMES} onChange={(v) => setTime(v)} allowNone label="Time available" />
         <span className="label">Energy</span>

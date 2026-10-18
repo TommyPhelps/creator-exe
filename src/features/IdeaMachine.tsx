@@ -6,7 +6,8 @@ import { FOCUS_PRESETS, normalizeFocus, presetFocus, type FocusPresetId } from "
 import { loadCreatorContext } from "../domain/ideas/context.ts";
 import { GAMING_SUBJECTS, GAMING_TECH_SUBJECTS, subjectLabel } from "../domain/ideas/subjects.ts";
 import { startProjectFromIdea } from "../domain/handoff.ts";
-import type { Idea, IdeaStatus } from "../domain/types.ts";
+import { DESTINATIONS, type Destination, type Idea, type IdeaStatus } from "../domain/types.ts";
+import { GamesTab } from "./GamesTab.tsx";
 import { Button, Chip, Empty, Field, Note, PageHead, Segmented, Tabs, TextArea, TextInput, Win } from "../ui/kit.tsx";
 import { IdeaCard, useIdeaActions } from "./ideaActions.tsx";
 
@@ -29,6 +30,7 @@ const INTEREST: { id: InterestMode; label: string; hint: string }[] = [
 
 type Opt<T extends string> = { id: T; label: string }[];
 const CONTROLS: { key: keyof GeneratorControls; label: string; options: Opt<string> }[] = [
+  { key: "collab", label: "Playing", options: [{ id: "solo", label: "Solo" }, { id: "friends", label: "With friends" }] },
   { key: "familiarity", label: "Games", options: [{ id: "known", label: "Ones I know" }, { id: "unfamiliar", label: "Ones I don't know" }] },
   { key: "access", label: "Game cost", options: [{ id: "free", label: "Free games only" }, { id: "owned", label: "Owned or free" }, { id: "buy", label: "Willing to buy" }] },
   { key: "era", label: "Era", options: [{ id: "retro", label: "Retro (before 2008)" }, { id: "modern", label: "Modern" }] },
@@ -136,7 +138,17 @@ function GenreChips({ value, onChange }: { value: string[]; onChange: (v: string
   );
 }
 
-function Generate() {
+const STREAM_MODES = [
+  { id: "concept", label: "Concept Stream" },
+  { id: "casual", label: "Casual Live" },
+] as const;
+const DESTINATION_HINT: Record<Destination, string> = {
+  youtube: "Videos with a reason to exist: a discovery, an experiment, a situation, a question. No Let's Plays.",
+  twitch: "Streams. Concept Streams have something to explore; Casual Live needs no premise at all.",
+  both: "Things that work live and could also become a YouTube video later (you decide if they do).",
+};
+
+function Generate({ around, onAroundDone }: { around: { game: string; nonce: number } | null; onAroundDone: () => void }) {
   const { db, settings, updateSettings, toast } = useApp();
   const actions = useIdeaActions();
   const [controls, setControls] = useState<GeneratorControls>({ ...settings.generator });
@@ -177,7 +189,18 @@ function Generate() {
     }
   };
 
+  // "What could I make with this?" from the Games tab.
+  useEffect(() => {
+    if (!around) return;
+    setInspiration(around.game);
+    set({ inspiration: [around.game] });
+    void run({ inspiration: [around.game] });
+    onAroundDone();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [around?.nonce]);
+
   const mode = controls.mode ?? "standard";
+  const destination: Destination = controls.destination ?? "youtube";
   const budgetValue = controls.budgetUsd === null || controls.budgetUsd === undefined ? null : String(controls.budgetUsd);
   const active = CONTROLS.filter((c) => controls[c.key]).length + (controls.genres?.length ? 1 : 0) + (budgetValue !== null ? 1 : 0);
 
@@ -187,6 +210,16 @@ function Generate() {
       <Win title="IDEA MACHINE CONTROLS" icon="settings" meta={active ? `${active} filter${active > 1 ? "s" : ""} on` : "no filters"}>
         <div className="stack">
           <div className="ctl-grid">
+            <span className="label">Making</span>
+            <div className="stack tight">
+              <div className="row">
+                <Segmented value={destination} options={DESTINATIONS} onChange={(v) => set({ destination: v ?? "youtube" })} label="What you're making" />
+                {destination === "twitch" ? (
+                  <Segmented value={controls.streamMode ?? null} options={STREAM_MODES} onChange={(v) => set({ streamMode: v })} allowNone label="Stream mode" />
+                ) : null}
+              </div>
+              <span className="dim small">{DESTINATION_HINT[destination]}</span>
+            </div>
             <span className="label">Mode</span>
             <div className="stack tight">
               <Segmented value={mode} options={MODES} onChange={(v) => set({ mode: v ?? "standard" })} label="Generation mode" />
@@ -303,6 +336,12 @@ function Generate() {
               />
             ))}
           </div>
+          {result.variety && result.variety.shown >= 6 ? (
+            <p className="small variety-line" title="Measured over your last 30 suggestions, this batch included">
+              VARIETY :: last {result.variety.shown} ideas: {result.variety.games} games, {result.variety.genres} genres, {result.variety.developers} developers
+              {result.variety.top ? `; most frequent: ${result.variety.top.name} (${result.variety.top.count})` : ""}
+            </p>
+          ) : null}
           <p className="dim small">
             Ratings are rough estimates, not predictions. Ownership comes only from the library you imported; prices and covers come from the Steam store with the date checked. {result.poolSize} concepts matched your limits.
           </p>
@@ -530,8 +569,9 @@ function Compare({ ids, onBack }: { ids: string[]; onBack: () => void }) {
 
 export function IdeaMachine() {
   const { route, go } = useApp();
-  const [tab, setTab] = useState<"generate" | "inbox" | "compare">(route.tab === "inbox" ? "inbox" : "generate");
+  const [tab, setTab] = useState<"generate" | "games" | "inbox" | "compare">(route.tab === "inbox" ? "inbox" : route.tab === "games" ? "games" : "generate");
   const [compareIds, setCompareIds] = useState<string[]>([]);
+  const [around, setAround] = useState<{ game: string; nonce: number } | null>(null);
   return (
     <div className="page">
       <PageHead sys="IDEA MACHINE :: NEW IDEA INCOMING" title="Find something worth making" lede="Gaming first: your Content Focus decides what shows up. Every suggestion explains why, and your reactions shape the next batch without locking you into one game or genre." />
@@ -539,6 +579,7 @@ export function IdeaMachine() {
         value={tab}
         tabs={[
           { id: "generate", label: "Generate" },
+          { id: "games", label: "Games" },
           { id: "inbox", label: "Inbox & saved" },
           { id: "compare", label: "Compare" },
         ]}
@@ -548,7 +589,15 @@ export function IdeaMachine() {
         }}
       />
       <div className="tabpanel">
-        {tab === "generate" ? <Generate /> : null}
+        {tab === "generate" ? <Generate around={around} onAroundDone={() => setAround(null)} /> : null}
+        {tab === "games" ? (
+          <GamesTab
+            onMakeWith={(game) => {
+              setAround({ game, nonce: Date.now() });
+              setTab("generate");
+            }}
+          />
+        ) : null}
         {tab === "inbox" ? (
           <Inbox
             onCompare={(ids) => {

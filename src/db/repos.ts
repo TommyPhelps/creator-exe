@@ -4,6 +4,7 @@
 import type { Db, Statement } from "../platform/types.ts";
 import type { LibraryGame } from "../domain/games/library.ts";
 import { newId, nowIso, parseJson } from "../lib/util.ts";
+import { EMPTY_START_PLAN } from "../domain/startGuide.ts";
 import type {
   Complexity,
   Destination,
@@ -412,6 +413,8 @@ export const EMPTY_DETAILS: ProjectDetails = {
   ifItGoesWell: "",
   myNotes: "",
   source: null,
+  startPlan: EMPTY_START_PLAN,
+  startFrom: null,
 };
 
 const toProject = (r: Row): Project => ({

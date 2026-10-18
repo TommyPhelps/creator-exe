@@ -464,3 +464,9 @@ ul.plain { margin: 0; padding-left: 18px; }
 .continue-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 8px; }
 .continue-item { flex-direction: column; align-items: flex-start; gap: 3px; padding: 8px 10px; text-align: left; min-width: 0; }
 .continue-item > * { max-width: 100%; }
+
+/* v0.1.3: Games tab and variety line */
+.games-table-wrap { max-height: calc(100vh - 380px); min-height: 240px; overflow: auto; background: var(--field); box-shadow: var(--sunken); }
+.games-table td { padding: 4px 8px; vertical-align: middle; }
+.games-table tr:hover td { background: var(--face-2); }
+.variety-line { font-family: var(--font-mono, monospace); color: var(--led); letter-spacing: .3px; margin: 2px 0; }

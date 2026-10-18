@@ -1,3 +1,4 @@
+import type { StartPlan } from "./startGuide.ts";
 // Core domain types shared by the UI, repositories and generators.
 
 // ---------- Creator profile ----------
@@ -291,6 +292,10 @@ export interface ProjectDetails {
   myNotes: string;
   /** Where the project came from. */
   source: { ideaId: string; ideaKey: string | null; seedKey: string | null; startedAt: string } | null;
+  /** v0.1.3 "Where do I start?" answers. */
+  startPlan: StartPlan;
+  /** Where recording usually starts for this idea, from the idea itself. */
+  startFrom: "new" | "save" | "anywhere" | null;
 }
 
 /** Where a project is headed. A stream and a later upload are separate outcomes. */

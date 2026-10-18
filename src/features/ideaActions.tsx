@@ -8,6 +8,7 @@ import { getGame, getGameInfo, recordIdeaFeedback, saveGameInfo, saveIdea, type 
 import { startProjectFromIdea } from "../domain/handoff.ts";
 import { subjectLabel } from "../domain/ideas/subjects.ts";
 import { videoTypeLabel } from "../domain/ideas/videoTypes.ts";
+import { PREMISE_LABEL, type PremiseKind } from "../domain/ideas/library.ts";
 import { DOMAIN_LABEL } from "../domain/ideas/focus.ts";
 import { canon, findCatalogGame } from "../domain/games/catalog.ts";
 import { accessLabel } from "../domain/games/library.ts";
@@ -192,6 +193,14 @@ export function IdeaCard(props: {
         <span title="Content focus area">{DOMAIN_LABEL[g.domain]}</span>
         <span>·</span>
         <span>{videoTypeLabel(g.videoType)}</span>
+        {d.reason ? (
+          <>
+            <span>·</span>
+            <span title="Why this video exists">{PREMISE_LABEL[d.reason as PremiseKind] ?? d.reason}</span>
+          </>
+        ) : null}
+        {d.destination && d.destination !== "youtube" && d.live === "great" && d.reason !== "casual-live" ? <span className="chip">works live</span> : null}
+        {d.general ? <span className="chip" title="A general format with this game slotted in: nothing specific is claimed about the game">general format</span> : null}
         {g.novelty ? <span className="chip accent">something new</span> : null}
       </div>
       <h3 className="selectable">{g.title}</h3>
@@ -364,7 +373,7 @@ export function IdeaCard(props: {
 
       <div className="row idea-actions">
         <Button variant="primary" icon="play" onClick={props.onStart}>
-          {props.tonight ? "START THIS VIDEO" : "Start project"}
+          {d.destination === "twitch" ? (props.tonight ? "PLAN THIS STREAM" : "Plan stream") : props.tonight ? "START THIS VIDEO" : "Start project"}
         </Button>
         <Button icon="star" onClick={props.onSave}>
           Save

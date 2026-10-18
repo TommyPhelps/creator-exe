@@ -169,7 +169,18 @@ export interface GeneratedIdea {
   novelty: boolean;
 }
 
+/** How varied your recent suggestions have been (last 30 shown, this batch included). */
+export interface VarietySummary {
+  shown: number;
+  games: number;
+  genres: number;
+  developers: number;
+  /** The developer or series that came up most, if any came up more than once. */
+  top: { name: string; count: number } | null;
+}
+
 export interface GenerationResult {
+  variety?: VarietySummary;
   ideas: GeneratedIdea[];
   relaxed: string[];
   notes: string[];
@@ -1181,6 +1192,25 @@ export function generateIdeas(controls: GeneratorControls, ctx: CreatorContext, 
     };
   });
 
+  // Variety over the last 30 suggestions, this batch first.
+  const recentWindow = [...chosen.map((p) => p.c), ...[...ctx.impressions].sort((a, b) => b.shownAt.localeCompare(a.shownAt)).map((i) => byKey.get(i.ideaKey) ?? candidateByKey(i.ideaKey)).filter((c): c is Candidate => !!c)].slice(0, 30);
+  const vGames = new Set<string>();
+  const vGenres = new Set<string>();
+  const vDevs = new Map<string, number>();
+  for (const c of recentWindow) {
+    for (const g of c.gameNames) if (!findCatalogGame(g)?.generic) vGames.add(canon(g));
+    for (const x of c.subjects) if (subjectDomain(x) === "gaming" && x !== "video-games") vGenres.add(x);
+    for (const g of gameGroups(c.gameNames, facts)) vDevs.set(g, (vDevs.get(g) ?? 0) + 1);
+  }
+  const topGroup = [...vDevs].sort((a, b) => b[1] - a[1])[0];
+  const variety: VarietySummary = {
+    shown: recentWindow.length,
+    games: vGames.size,
+    genres: vGenres.size,
+    developers: [...vDevs.keys()].filter((g) => g.startsWith("dev:")).length,
+    top: topGroup && topGroup[1] > 1 ? { name: topGroup[0].replace(/^(dev|series):/, ""), count: topGroup[1] } : null,
+  };
+
   if (!ideas.length) notes.push(opts.likeThis ? "No close relatives of that idea are left right now. Try again after reacting to a few more ideas." : "Nothing fits those limits inside your Content Focus. Try fewer filters, a bigger budget, or more time.");
-  return { ideas, relaxed, notes, poolSize: pool.length, focus };
+  return { ideas, relaxed, notes, poolSize: pool.length, focus, variety };
 }
