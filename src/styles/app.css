@@ -414,3 +414,37 @@ ul.plain { margin: 0; padding-left: 18px; }
 .identity { display: grid; grid-template-columns: minmax(280px, 1fr) minmax(280px, 1.2fr); gap: 8px 24px; align-items: start; }
 .identity-desc { white-space: pre-wrap; margin: 0; font: calc(var(--base) + 1px)/1.5 var(--font-mono); color: var(--lcd); background: var(--lcd-bg); padding: 10px 12px; box-shadow: var(--sunken); }
 @media (max-width: 1100px) { .identity { grid-template-columns: 1fr; } }
+
+/* ---------- v0.1.2 recording sheet ---------- */
+.sheet { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(360px, 1fr); gap: calc(var(--gap) * 1.6); align-items: start; font-size: calc(var(--base) + 1px); }
+.sheet-main, .sheet-side { display: flex; flex-direction: column; gap: calc(var(--gap) * 1.2); min-width: 0; }
+.sheet-more { grid-column: 1 / -1; }
+.sheet-section { background: var(--face); box-shadow: var(--raised); padding: calc(var(--pad) * 1.2) calc(var(--pad) * 1.4); display: flex; flex-direction: column; gap: 8px; }
+.sheet-section h4 { margin: 0; font: 700 12px var(--font-mono); letter-spacing: 1.5px; text-transform: uppercase; color: var(--led); }
+.sheet-section.accent { box-shadow: var(--raised), inset 4px 0 0 var(--led); }
+.sheet-section summary, .sheet-more summary { cursor: default; list-style: none; }
+.sheet-section summary h4, .sheet-more summary h4 { display: inline; }
+.sheet-section summary::before, .sheet-more > details > summary::before { content: "\25B8  "; color: var(--text-dim); }
+.sheet-section[open] summary::before, .sheet-more > details[open] > summary::before { content: "\25BE  "; }
+.sheet-more > details { background: var(--face); box-shadow: var(--raised); padding: calc(var(--pad) * 1.2) calc(var(--pad) * 1.4); }
+.sheet-more > details > summary h4 { margin: 0; font: 700 12px var(--font-mono); letter-spacing: 1.5px; text-transform: uppercase; color: var(--text); }
+.sheet-more .grid { margin-top: 10px; }
+.sheet-more .field > span { display: block; font-size: 12.5px; color: var(--text-dim); margin-bottom: 3px; }
+.sheet-game { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 4px 2px; }
+.sheet-game .label { font-size: 11.5px; letter-spacing: 1px; text-transform: uppercase; color: var(--text-dim); }
+.sheet-game-name { font: 700 calc(var(--base) + 8px)/1.2 var(--font-title); }
+.sheet .hook { font: 600 calc(var(--base) + 4px)/1.4 var(--font-ui); }
+.sheet .watch { margin: 0; }
+.sheet .watch .label { font-size: 11.5px; letter-spacing: 1px; text-transform: uppercase; color: var(--text-dim); margin-right: 8px; }
+.approach { display: flex; gap: 10px; align-items: flex-start; text-align: left; width: 100%; padding: 8px 10px; background: var(--face-2); border: 0; box-shadow: inset 0 0 0 1px var(--hi-2); cursor: default; font: inherit; color: inherit; }
+.approach:hover { box-shadow: inset 0 0 0 1px var(--hi); }
+.approach.on { background: var(--select); color: var(--select-text); box-shadow: var(--sunken); }
+.approach-mark { font-size: 15px; line-height: 1.3; color: var(--led); }
+.approach.on .approach-mark { color: var(--select-text); }
+.approach-how { display: block; margin-top: 2px; opacity: .85; }
+.approach.editing { flex-direction: column; align-items: stretch; }
+.sheet-next { padding: 10px 14px; }
+.sheet-next .lcd-input .input, .sheet-next input.input { background: transparent; border: 0; box-shadow: none; color: var(--lcd); font: calc(var(--base) + 2px)/1.4 var(--font-mono); text-shadow: 0 0 6px currentColor; padding: 4px 0; width: 100%; }
+.moment input.input.done, .moment .done { text-decoration: line-through; opacity: .6; }
+.bullet { color: var(--led); }
+@media (max-width: 1300px) { .sheet { grid-template-columns: 1fr; } }

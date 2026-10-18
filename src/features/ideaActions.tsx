@@ -4,8 +4,8 @@ import { useApp } from "../app/context.tsx";
 import type { GeneratedIdea } from "../domain/ideas/generator.ts";
 import { TIME_LABEL } from "../domain/ideas/generator.ts";
 import { REACTIONS, type FeedbackDetail, type Idea, type IdeaStatus, type Reaction } from "../domain/types.ts";
-import { createProject, getGame, getGameInfo, recordIdeaFeedback, saveGameInfo, saveIdea, type GameInfo } from "../db/repos.ts";
-import { projectFromIdea } from "../domain/projects.ts";
+import { getGame, getGameInfo, recordIdeaFeedback, saveGameInfo, saveIdea, type GameInfo } from "../db/repos.ts";
+import { startProjectFromIdea } from "../domain/handoff.ts";
 import { subjectLabel } from "../domain/ideas/subjects.ts";
 import { videoTypeLabel } from "../domain/ideas/videoTypes.ts";
 import { DOMAIN_LABEL } from "../domain/ideas/focus.ts";
@@ -55,10 +55,10 @@ export function useIdeaActions() {
     async start(g: GeneratedIdea, tonight = false) {
       try {
         const idea = await persist(g, "saved");
-        const p = await createProject(db, projectFromIdea(idea, { tonight }));
+        const { project, existed } = await startProjectFromIdea(db, idea, { tonight });
         changed();
-        toast("PROJECT INITIALIZED", tonight ? "First five minutes are on the Plan tab." : g.title);
-        go({ section: "workshop", projectId: p.id });
+        toast(existed ? "PROJECT REOPENED" : "PROJECT INITIALIZED", existed ? "You already started this idea; here it is." : "Your recording sheet is ready.");
+        go({ section: "workshop", projectId: project.id });
       } catch (e) {
         toast("ERROR", e instanceof Error ? e.message : String(e), "err");
       }
@@ -240,8 +240,12 @@ export function IdeaCard(props: {
           <dd>
             <b>{d.tonight.firstFive}</b>
           </dd>
-          <dt>Smallest video</dt>
-          <dd>{d.tonight.minimumVideo}</dd>
+          {d.tonight.minimumVideo ? (
+            <>
+              <dt>Smallest video</dt>
+              <dd>{d.tonight.minimumVideo}</dd>
+            </>
+          ) : null}
         </dl>
       ) : (
         <dl className="kv selectable">
@@ -267,7 +271,7 @@ export function IdeaCard(props: {
             <dd>{d.budgetNote}</dd>
             <dt>Thumbnail idea</dt>
             <dd>{d.thumbnail}</dd>
-            {props.tonight && d.tonight ? (
+            {props.tonight && d.tonight?.expansion ? (
               <>
                 <dt>If it goes well</dt>
                 <dd>{d.tonight.expansion}</dd>

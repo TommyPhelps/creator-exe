@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { mulberry32 } from "../src/lib/util.ts";
 import { memoryDb } from "./helpers/sqliteDb.ts";
 import { migrate } from "../src/db/migrate.ts";
-import { MIGRATIONS } from "../src/db/migrations.ts";
+import { MIGRATIONS, LATEST_SCHEMA_VERSION } from "../src/db/migrations.ts";
 import * as repo from "../src/db/repos.ts";
 import { IDEA_LIBRARY } from "../src/domain/ideas/library.ts";
 import { GAMING_LIBRARY } from "../src/domain/ideas/libraryGaming.ts";
@@ -407,7 +407,7 @@ test("schema v1 -> v2 keeps every row, adds defaults, and old backups still rest
 
   const report = await migrate(db);
   assert.equal(report.from, 1);
-  assert.equal(report.to, 3, "v2 plus the v3 repair");
+  assert.equal(report.to, LATEST_SCHEMA_VERSION, "v2 plus later repairs");
   const profile = await repo.listProfile(db);
   assert.equal(profile.length, 2);
   assert.ok(profile.every((p) => p.scope === "channel"), "existing entries default to channel until the upgrade step");

@@ -255,8 +255,9 @@ function derivedTonight(seed: IdeaSeed, c: Candidate): TonightPlan {
   return {
     needs: seed.requirements.map((r) => fill(r, c)),
     firstFive: fill(seed.firstStep, c),
-    minimumVideo: `Keep it small: one focused part of the plan (${fill(seed.whatYouDo, c).split(/[,.;]/)[0]?.toLowerCase() ?? "the core idea"}) in under ten minutes.`,
-    expansion: seed.alternatives?.[0] ? fill(seed.alternatives[0], c) : "Expand it later if you enjoyed making the short version.",
+    // No made-up "smallest video" text: only hand-written plans fill these.
+    minimumVideo: "",
+    expansion: seed.alternatives?.[0] ? fill(seed.alternatives[0], c) : "",
   };
 }
 

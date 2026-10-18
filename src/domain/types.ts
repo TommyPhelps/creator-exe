@@ -152,6 +152,20 @@ export interface IdeaDetails {
   games?: string[];
   /** Ownership/price status at the time the idea was generated, in words. */
   access?: string;
+  /** Since v0.1.2: game-specific depth (filled where hand-written notes exist). */
+  hook?: string;
+  watchAppeal?: string;
+  approaches?: Approach[];
+  startingSituation?: string;
+  moments?: string[];
+  visualBeats?: string[];
+  /** True when hook/moments/approaches were written for this specific game, not a template. */
+  specific?: boolean;
+}
+
+export interface Approach {
+  name: string;
+  how: string;
 }
 
 export type IdeaStatus = "inbox" | "saved" | "maybe" | "rejected" | "started" | "done";
@@ -163,6 +177,8 @@ export interface Idea {
   libraryKey: string | null;
   title: string;
   premise: string;
+  /** Your own notes on the idea; carried into the project. */
+  notes: string;
   details: IdeaDetails | null;
   subjects: string[];
   status: IdeaStatus;
@@ -243,6 +259,28 @@ export interface ProjectDetails {
   customStatus: string;
   /** Snapshot of the idea the project started from (if any). */
   origin: string;
+  // ---- v0.1.2 recording sheet (structured; empty for older projects) ----
+  game: string;
+  videoType: string;
+  /** Ownership / price in words, as known when the project started. */
+  access: string;
+  hook: string;
+  watchAppeal: string;
+  approaches: Approach[];
+  /** Index into approaches, or null when you haven't picked one. */
+  chosenApproach: number | null;
+  startingSituation: string;
+  visualBeats: string[];
+  /** What you need, listed once (not duplicated into a checklist). */
+  needs: string[];
+  whySuits: string[];
+  firstFive: string;
+  smallestVideo: string;
+  ifItGoesWell: string;
+  /** Your notes from the idea, then anything you add. */
+  myNotes: string;
+  /** Where the project came from. */
+  source: { ideaId: string; ideaKey: string | null; seedKey: string | null; startedAt: string } | null;
 }
 
 export interface Project {

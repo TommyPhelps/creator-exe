@@ -303,6 +303,17 @@ export const MIGRATIONS: Migration[] = [
     statements: [],
     run: convergeSchema,
   },
+  {
+    version: 4,
+    name: "your notes on ideas",
+    statements: [],
+    run: async (db) => {
+      const have = await columnNames(db, "ideas");
+      if (have.has("notes")) return [];
+      await db.execute("ALTER TABLE ideas ADD COLUMN notes TEXT NOT NULL DEFAULT ''");
+      return ["added ideas.notes"];
+    },
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1]?.version ?? 0;

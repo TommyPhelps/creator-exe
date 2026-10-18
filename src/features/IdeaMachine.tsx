@@ -1,11 +1,11 @@
 import { Fragment, useEffect, useState } from "react";
 import { useAction, useApp, useData } from "../app/context.tsx";
-import { createProject, deleteIdea, listIdeas, recordIdeaFeedback, recordImpressions, setIdeaStatus, updateIdea } from "../db/repos.ts";
+import { deleteIdea, listIdeas, recordIdeaFeedback, recordImpressions, setIdeaStatus, updateIdea } from "../db/repos.ts";
 import { generateIdeas, TIME_LABEL, type GeneratedIdea, type GenerationResult, type GeneratorControls, type GenMode, type InterestMode } from "../domain/ideas/generator.ts";
 import { FOCUS_PRESETS, normalizeFocus, presetFocus, type FocusPresetId } from "../domain/ideas/focus.ts";
 import { loadCreatorContext } from "../domain/ideas/context.ts";
 import { GAMING_SUBJECTS, GAMING_TECH_SUBJECTS, subjectLabel } from "../domain/ideas/subjects.ts";
-import { projectFromIdea } from "../domain/projects.ts";
+import { startProjectFromIdea } from "../domain/handoff.ts";
 import type { Idea, IdeaStatus } from "../domain/types.ts";
 import { Button, Chip, Empty, Field, Note, PageHead, Segmented, Tabs, TextArea, TextInput, Win } from "../ui/kit.tsx";
 import { IdeaCard, useIdeaActions } from "./ideaActions.tsx";
@@ -337,10 +337,10 @@ function Inbox({ onCompare }: { onCompare: (ids: string[]) => void }) {
 
   const start = async (i: Idea) => {
     try {
-      const p = await createProject(db, projectFromIdea(i));
+      const { project, existed } = await startProjectFromIdea(db, i);
       changed();
-      toast("PROJECT INITIALIZED", i.title);
-      go({ section: "workshop", projectId: p.id });
+      toast(existed ? "PROJECT REOPENED" : "PROJECT INITIALIZED", existed ? "You already started this idea; here it is." : i.title);
+      go({ section: "workshop", projectId: project.id });
     } catch (e) {
       toast("ERROR", e instanceof Error ? e.message : String(e), "err");
     }
@@ -416,7 +416,10 @@ function Inbox({ onCompare }: { onCompare: (ids: string[]) => void }) {
         {sel ? (
           <div className="stack">
             <Field label="Title">{(id) => <TextInput id={id} value={sel.title} onCommit={(v) => void act(() => updateIdea(db, sel.id, { title: v }))} />}</Field>
-            <Field label="Premise / notes">{(id) => <TextArea id={id} value={sel.premise} rows={4} onCommit={(v) => void act(() => updateIdea(db, sel.id, { premise: v }))} />}</Field>
+            <Field label="Premise">{(id) => <TextArea id={id} value={sel.premise} rows={3} onCommit={(v) => void act(() => updateIdea(db, sel.id, { premise: v }))} />}</Field>
+            <Field label="My notes" hint="Anything you want to remember. Goes with the idea into its project.">
+              {(id) => <TextArea id={id} value={sel.notes} rows={4} placeholder="e.g. do this one with the OpenMW comparison" onCommit={(v) => void act(() => updateIdea(db, sel.id, { notes: v }))} />}
+            </Field>
             <div className="row">
               <span className="label">Status</span>
               <Segmented value={sel.status} options={STATUS_OPTS} onChange={(v) => v && void act(() => setIdeaStatus(db, sel.id, v))} label="Status" />

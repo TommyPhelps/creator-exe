@@ -19,29 +19,15 @@ import {
   updateProject,
   type ProjectPatch,
 } from "../db/repos.ts";
-import { STAGES, type Complexity, type Project, type ProjectDetails, type ResearchItem, type TaskList } from "../domain/types.ts";
+import { STAGES, type Complexity, type Project, type ResearchItem, type TaskList } from "../domain/types.ts";
 import { rescueOptions, stageLabel, suggestedNextAction } from "../domain/projects.ts";
-import { subjectLabel } from "../domain/ideas/subjects.ts";
 import { formatDate, relativeTime } from "../lib/util.ts";
-import { Button, Chip, Dialog, Empty, Field, Note, PageHead, Segmented, Select, Tabs, TextArea, TextInput, Win } from "../ui/kit.tsx";
+import { Button, Chip, Dialog, Empty, Note, PageHead, Segmented, Select, Tabs, TextInput, Win } from "../ui/kit.tsx";
 import { ResearchEditor, SOURCE_TYPES, VERIFICATION } from "./Research.tsx";
+import { RecordingSheet } from "./RecordingSheet.tsx";
 
-type Tab = "plan" | "checklists" | "research" | "files" | "history";
+type Tab = "sheet" | "checklists" | "research" | "files" | "history";
 
-const SECTIONS: { key: keyof ProjectDetails; label: string; hint: string; rows?: number }[] = [
-  { key: "research", label: "Research", hint: "What you need to find out, at what depth." },
-  { key: "recordingRequirements", label: "Recording requirements", hint: "Screen, voice, camera, real-world footage." },
-  { key: "equipment", label: "Equipment", hint: "Hardware, software, props." },
-  { key: "locations", label: "Locations (if any)", hint: "Where you need to be, and permissions needed." },
-  { key: "questions", label: "Important questions", hint: "What the video should answer or investigate." },
-  { key: "thingsToCapture", label: "Things to capture", hint: "Shots, moments, screens you don't want to forget." },
-  { key: "references", label: "Reference materials", hint: "Videos, articles, examples you want to look at." },
-  { key: "structure", label: "Optional structure", hint: "A loose outline or talking points. Improvise freely; this is not a script.", rows: 5 },
-  { key: "assets", label: "Project assets & credits", hint: "Music, images, clips you'll use and where they came from." },
-  { key: "thumbnailConcepts", label: "Thumbnail concepts", hint: "Ideas for the thumbnail (design them in Thumbnail Lab)." },
-  { key: "uploadInfo", label: "Upload information", hint: "Anything to remember when publishing." },
-  { key: "notes", label: "Notes", hint: "Anything else.", rows: 5 },
-];
 
 const LISTS: { id: TaskList; label: string; hint: string }[] = [
   { id: "prep", label: "Preparation", hint: "What to get ready before recording." },
@@ -349,7 +335,7 @@ function Rescue({ project, onClose }: { project: Project; onClose: () => void })
 export function Workshop({ projectId, tab: initialTab }: { projectId: string; tab?: string }) {
   const { db, go } = useApp();
   const act = useAction();
-  const [tab, setTab] = useState<Tab>((initialTab as Tab) || "plan");
+  const [tab, setTab] = useState<Tab>(initialTab && initialTab !== "plan" ? (initialTab as Tab) : "sheet");
   const [rescue, setRescue] = useState(false);
   const { data, error } = useData(async () => {
     const [project, tasks, research, thumbs, titles, packages] = await Promise.all([
@@ -400,18 +386,6 @@ export function Workshop({ projectId, tab: initialTab }: { projectId: string; ta
           </>
         }
       />
-      <div className="lcd" style={{ padding: "10px 16px" }}>
-        <div className="lcd-label">NEXT ACTION</div>
-        <div className="row nowrap" style={{ marginTop: 4 }}>
-          <div className="lcd-line grow selectable">&gt; {next}</div>
-        </div>
-      </div>
-      <div className="row nowrap">
-        <span className="label" style={{ width: 100 }}>
-          Next action
-        </span>
-        <TextInput className="grow" value={p.nextAction} placeholder={next} onCommit={(v) => save({ nextAction: v })} />
-      </div>
       <div className="row">
         <span className="label" style={{ width: 100 }}>
           Stage
@@ -440,7 +414,7 @@ export function Workshop({ projectId, tab: initialTab }: { projectId: string; ta
       <Tabs<Tab>
         value={tab}
         tabs={[
-          { id: "plan", label: "Plan" },
+          { id: "sheet", label: "Recording sheet" },
           { id: "checklists", label: "Checklists", badge: data.tasks.filter((t) => !t.done).length },
           { id: "research", label: "Research", badge: data.research.length },
           { id: "files", label: "Folder, editor & links" },
@@ -449,39 +423,13 @@ export function Workshop({ projectId, tab: initialTab }: { projectId: string; ta
         onChange={setTab}
       />
       <div className="tabpanel">
-        {tab === "plan" ? (
-          <div className="stack">
-            <div className="grid cols-2">
-              <Field label="Project title">{(id) => <TextInput id={id} value={p.title} onCommit={(v) => v.trim() && save({ title: v.trim() })} />}</Field>
-              <Field label="Subjects" hint="Used for tags and idea suggestions.">
-                {() => (
-                  <div className="row">
-                    {p.subjects.length ? p.subjects.map((s) => <Chip key={s} onRemove={() => save({ subjects: p.subjects.filter((x) => x !== s) })}>{subjectLabel(s)}</Chip>) : <span className="dim small">None yet</span>}
-                  </div>
-                )}
-              </Field>
-              <Field label="Core premise">{(id) => <TextArea id={id} value={p.premise} rows={3} onCommit={(v) => save({ premise: v })} />}</Field>
-              <Field label="Why I want to make it">{(id) => <TextArea id={id} value={p.why} rows={3} onCommit={(v) => save({ why: v })} />}</Field>
-            </div>
-            {p.details.origin ? (
-              <details>
-                <summary className="dim">Where this idea came from</summary>
-                <pre className="inset small selectable" style={{ whiteSpace: "pre-wrap", fontFamily: "var(--font-ui)" }}>
-                  {p.details.origin}
-                </pre>
-              </details>
-            ) : null}
-            <div className="grid cols-2">
-              {SECTIONS.map((s) => (
-                <Field key={s.key} label={s.label} hint={s.hint}>
-                  {(id) => <TextArea id={id} rows={s.rows ?? 3} value={String(p.details[s.key] ?? "")} onCommit={(v) => save({ details: { [s.key]: v } as Partial<ProjectDetails> })} />}
-                </Field>
-              ))}
-            </div>
+        {tab === "sheet" ? (
+          <>
+            <RecordingSheet project={p} next={next} />
             <p className="dim small">
               Everything saves automatically. Created {formatDate(p.createdAt)}, last changed {relativeTime(p.updatedAt)}.
             </p>
-          </div>
+          </>
         ) : null}
         {tab === "checklists" ? <Checklists projectId={p.id} /> : null}
         {tab === "research" ? <ProjectResearch projectId={p.id} /> : null}

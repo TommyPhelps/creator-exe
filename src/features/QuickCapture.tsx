@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useApp } from "../app/context.tsx";
 import { Button, Dialog, Field } from "../ui/kit.tsx";
-import { createProject, saveIdea } from "../db/repos.ts";
+import { saveIdea } from "../db/repos.ts";
+import { startProjectFromIdea } from "../domain/handoff.ts";
 import { subjectsForText } from "../domain/ideas/subjects.ts";
 
 export function QuickCapture({ onClose }: { onClose: () => void }) {
@@ -17,10 +18,10 @@ export function QuickCapture({ onClose }: { onClose: () => void }) {
       const subjects = subjectsForText(`${title} ${note}`);
       const idea = await saveIdea(db, { origin: "capture", title, premise: note, subjects, status: "inbox" });
       if (start) {
-        const p = await createProject(db, { title, premise: note, ideaId: idea.id, subjects, nextAction: "Write one sentence about why you want to make this." });
+        const { project } = await startProjectFromIdea(db, idea);
         changed();
         toast("PROJECT INITIALIZED", title);
-        go({ section: "workshop", projectId: p.id });
+        go({ section: "workshop", projectId: project.id });
       } else {
         changed();
         toast("BRAIN BUFFER SAVED", "Captured to the Idea Inbox.");

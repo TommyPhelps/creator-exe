@@ -148,7 +148,8 @@ test("context loads from the database and idea -> project prefills the workshop"
   assert.equal(p.stage, "preparing");
   assert.equal(p.nextAction, g.details.tonight?.firstFive);
   assert.ok(p.details.origin.includes("What you'd actually do"));
-  assert.ok((await repo.listTasks(db, p.id)).length > 0);
+  assert.deepEqual(p.details.needs, g.details.tonight?.needs, "what you need is listed once, on the sheet");
+  assert.equal((await repo.listTasks(db, p.id)).filter((t) => t.list === "prep").length, 0, "needs are not duplicated as checklist items");
   const c2 = await loadCreatorContext(db);
   assert.ok(c2.takenKeys.has(g.key), "started ideas are not suggested again");
 });

@@ -1,6 +1,6 @@
 // Turning ideas into projects, and helpers for project state.
 import type { NewProjectInput } from "../db/repos.ts";
-import type { Complexity, Idea, IdeaDetails, Project, ProjectTask, Stage } from "./types.ts";
+import type { Approach, Complexity, Idea, IdeaDetails, Project, ProjectTask, Stage } from "./types.ts";
 import { STAGES } from "./types.ts";
 import { subjectLabel } from "./ideas/subjects.ts";
 
@@ -18,17 +18,29 @@ const RECORDING_LABEL: Record<string, string> = {
   "real-world": "real-world footage",
 };
 
+/** Approaches for an idea: hand-written ones, else what you'd do plus the listed alternatives. */
+export function approachesFor(d: IdeaDetails): Approach[] {
+  if (d.approaches?.length) return d.approaches;
+  return [{ name: "As planned", how: d.whatYouDo }, ...d.alternatives.map((a) => ({ name: a, how: "" }))];
+}
+
+/**
+ * Turns an idea into a project, carrying everything over once: the game, the
+ * hook, approaches, moments to capture (as the recording checklist), what you
+ * need (listed once, not duplicated into checklists), ownership, why it suits
+ * you, your notes and where it came from.
+ */
 export function projectFromIdea(idea: Idea, opts: { tonight?: boolean } = {}): NewProjectInput {
   const d = idea.details;
-  const tonight = opts.tonight ? d?.tonight ?? null : null;
+  const tonight = d?.tonight ?? null;
   const lines = (xs: string[]) => xs.map((x) => `- ${x}`).join("\n");
-  const prep = d ? [...(tonight?.needs ?? d.requirements)] : [];
+  const firstFive = (opts.tonight ? tonight?.firstFive : undefined) ?? d?.firstStep ?? tonight?.firstFive ?? "";
   return {
     title: idea.title,
     premise: idea.premise,
     why: d?.why ?? "",
-    complexity: tonight ? "quick" : complexityFor(d),
-    nextAction: tonight?.firstFive ?? d?.firstStep ?? "Write one sentence about why you want to make this.",
+    complexity: opts.tonight ? "quick" : complexityFor(d),
+    nextAction: firstFive || "Write one sentence about why you want to make this.",
     ideaId: idea.id,
     subjects: idea.subjects,
     stage: "preparing",
@@ -36,8 +48,6 @@ export function projectFromIdea(idea: Idea, opts: { tonight?: boolean } = {}): N
       ? {
           research: d.research === "light" ? "Light research: a couple of sources to confirm facts." : d.research === "moderate" ? "Moderate research: gather a handful of reliable sources." : "Deep research: build a source list before recording.",
           recordingRequirements: d.recording.map((r) => RECORDING_LABEL[r] ?? r).join(", "),
-          equipment: lines(d.requirements),
-          structure: tonight ? `Minimum viable video: ${tonight.minimumVideo}\nIf it goes well: ${tonight.expansion}` : "",
           thumbnailConcepts: d.thumbnail,
           origin: [
             `What you'd actually do: ${d.whatYouDo}`,
@@ -49,12 +59,26 @@ export function projectFromIdea(idea: Idea, opts: { tonight?: boolean } = {}): N
           ]
             .filter(Boolean)
             .join("\n"),
+          game: (d.games ?? []).join(" + "),
+          videoType: d.videoType ?? "",
+          access: d.access ?? "",
+          hook: d.hook ?? idea.premise,
+          watchAppeal: d.watchAppeal ?? d.worthExploring,
+          approaches: approachesFor(d),
+          chosenApproach: null,
+          startingSituation: d.startingSituation ?? "",
+          visualBeats: d.visualBeats ?? [],
+          needs: tonight && opts.tonight ? tonight.needs : d.requirements,
+          whySuits: d.reasons.length ? d.reasons : [d.why],
+          firstFive,
+          smallestVideo: tonight?.minimumVideo ?? "",
+          ifItGoesWell: tonight?.expansion ?? "",
+          myNotes: idea.notes,
+          source: { ideaId: idea.id, ideaKey: idea.libraryKey, seedKey: idea.libraryKey ? (idea.libraryKey.split(":")[0] ?? null) : null, startedAt: new Date().toISOString() },
         }
-      : {},
-    tasks: [
-      ...prep.map((label) => ({ list: "prep" as const, label })),
-      ...(tonight ? [{ list: "recording" as const, label: tonight.firstFive }] : d ? [{ list: "prep" as const, label: d.firstStep }] : []),
-    ],
+      : { myNotes: idea.notes, hook: idea.premise, source: { ideaId: idea.id, ideaKey: idea.libraryKey, seedKey: null, startedAt: new Date().toISOString() } },
+    // Moments to capture become the recording checklist, so you can tick them off while recording.
+    tasks: (d?.moments ?? []).map((label) => ({ list: "recording" as const, label })),
   };
 }
 

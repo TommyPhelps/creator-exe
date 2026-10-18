@@ -100,8 +100,9 @@ test("a v0.1.1 database gains only the preview's table; a fresh one gets everyth
   const before = await counts(db);
   const report = await migrate(db);
   assert.equal(report.from, 2);
-  assert.ok(report.applied[0]?.includes("added table video_forensics"));
-  assert.ok(!report.applied[0]?.includes("games"), "nothing of v0.1.1 is re-added");
+  const v3 = report.applied.find((a) => a.startsWith("3:")) ?? "";
+  assert.ok(v3.includes("added table video_forensics"), v3);
+  assert.ok(!v3.includes("games"), "nothing of v0.1.1 is re-added");
   await assertConverged(db);
   assert.deepEqual(await counts(db), before);
   assert.equal((await repo.listGames(db))[0]?.playtimeMin, 600, "game library untouched");
@@ -109,7 +110,7 @@ test("a v0.1.1 database gains only the preview's table; a fresh one gets everyth
   const fresh = memoryDb();
   const r = await migrate(fresh);
   assert.equal(r.from, 0);
-  assert.equal(r.to, 3);
+  assert.equal(r.to, LATEST_SCHEMA_VERSION);
   await assertConverged(fresh);
 });
 

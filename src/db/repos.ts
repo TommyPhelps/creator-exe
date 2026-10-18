@@ -237,6 +237,7 @@ const toIdea = (r: Row): Idea => ({
   libraryKey: strOrNull(r.library_key),
   title: str(r.title),
   premise: str(r.premise),
+  notes: str(r.notes),
   details: parseJson<IdeaDetails | null>(r.details, null),
   subjects: parseJson<string[]>(r.subjects, []),
   status: str(r.status) as IdeaStatus,
@@ -265,7 +266,7 @@ export async function findIdeaByKey(db: Db, key: string): Promise<Idea | null> {
 
 export async function saveIdea(
   db: Db,
-  input: { origin: IdeaOrigin; libraryKey?: string | null; title: string; premise?: string; details?: IdeaDetails | null; subjects?: string[]; status?: IdeaStatus; priority?: number },
+  input: { origin: IdeaOrigin; libraryKey?: string | null; title: string; premise?: string; notes?: string; details?: IdeaDetails | null; subjects?: string[]; status?: IdeaStatus; priority?: number },
 ): Promise<Idea> {
   if (input.libraryKey) {
     const existing = await findIdeaByKey(db, input.libraryKey);
@@ -281,6 +282,7 @@ export async function saveIdea(
     libraryKey: input.libraryKey ?? null,
     title: input.title.trim(),
     premise: input.premise?.trim() ?? "",
+    notes: input.notes ?? "",
     details: input.details ?? null,
     subjects: input.subjects ?? [],
     status: input.status ?? "inbox",
@@ -289,25 +291,32 @@ export async function saveIdea(
     updatedAt: t,
   };
   await db.execute(
-    "INSERT INTO ideas (id, origin, library_key, title, premise, details, subjects, status, priority, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-    [idea.id, idea.origin, idea.libraryKey, idea.title, idea.premise, JSON.stringify(idea.details), JSON.stringify(idea.subjects), idea.status, idea.priority, t, t],
+    "INSERT INTO ideas (id, origin, library_key, title, premise, notes, details, subjects, status, priority, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    [idea.id, idea.origin, idea.libraryKey, idea.title, idea.premise, idea.notes, JSON.stringify(idea.details), JSON.stringify(idea.subjects), idea.status, idea.priority, t, t],
   );
   return idea;
 }
 
-export async function updateIdea(db: Db, id: string, patch: Partial<Pick<Idea, "title" | "premise" | "priority" | "status" | "subjects">>): Promise<void> {
+export async function updateIdea(db: Db, id: string, patch: Partial<Pick<Idea, "title" | "premise" | "priority" | "status" | "subjects" | "notes">>): Promise<void> {
   const cur = await getIdea(db, id);
   if (!cur) return;
   const n = { ...cur, ...patch };
-  await db.execute("UPDATE ideas SET title = ?, premise = ?, priority = ?, status = ?, subjects = ?, updated_at = ? WHERE id = ?", [
+  await db.execute("UPDATE ideas SET title = ?, premise = ?, notes = ?, priority = ?, status = ?, subjects = ?, updated_at = ? WHERE id = ?", [
     n.title,
     n.premise,
+    n.notes,
     n.priority,
     n.status,
     JSON.stringify(n.subjects),
     nowIso(),
     id,
   ]);
+}
+
+/** The project already started from this idea, if any (so Start never makes a duplicate). */
+export async function findProjectForIdea(db: Db, ideaId: string): Promise<Project | null> {
+  const rows = await db.select<Row>("SELECT * FROM projects WHERE idea_id = ? ORDER BY archived ASC, updated_at DESC LIMIT 1", [ideaId]);
+  return rows[0] ? toProject(rows[0]) : null;
 }
 
 export async function setIdeaStatus(db: Db, id: string, status: IdeaStatus): Promise<void> {
@@ -383,6 +392,22 @@ export const EMPTY_DETAILS: ProjectDetails = {
   links: [],
   customStatus: "",
   origin: "",
+  game: "",
+  videoType: "",
+  access: "",
+  hook: "",
+  watchAppeal: "",
+  approaches: [],
+  chosenApproach: null,
+  startingSituation: "",
+  visualBeats: [],
+  needs: [],
+  whySuits: [],
+  firstFive: "",
+  smallestVideo: "",
+  ifItGoesWell: "",
+  myNotes: "",
+  source: null,
 };
 
 const toProject = (r: Row): Project => ({
