@@ -3,7 +3,7 @@
 // A result is used only when Steam's name matches the game exactly; no cover
 // or price is ever guessed. Everything is cached with the date it was checked.
 
-import type { GameInfo } from "../../db/repos.ts";
+import type { GameInfo, GameMeta } from "../../db/repos.ts";
 import type { HttpResult } from "../../platform/types.ts";
 import { canon, catalogNames, findCatalogGame } from "./catalog.ts";
 
@@ -25,6 +25,11 @@ interface DetailsResponse {
       is_free?: boolean;
       header_image?: string;
       price_overview?: { final_formatted?: string; currency?: string; discount_percent?: number };
+      developers?: string[];
+      publishers?: string[];
+      genres?: { id?: string; description?: string }[];
+      categories?: { id?: number; description?: string }[];
+      release_date?: { coming_soon?: boolean; date?: string };
     };
   };
 }
@@ -99,5 +104,81 @@ export async function lookupSteam(get: Get, name: string, knownAppId: number | n
     return { ...base, status: "found", steamAppId: appId, steamName: parsed.name ?? steamName, imageUrl: parsed.imageUrl, isFree: parsed.isFree, priceText: parsed.priceText };
   } catch {
     return { ...base, status: "error" };
+  }
+}
+
+// ---------------------------------------------------------------- v0.1.3: genres, developers, modes
+
+const GENRE_SUBJECTS: Record<string, string> = {
+  Racing: "racing-games",
+  RPG: "rpgs",
+  Simulation: "simulation-games",
+  Strategy: "strategy-games",
+  Indie: "indie-games",
+  Adventure: "adventure-games",
+  "Free to Play": "free-games",
+};
+const COOP = /co-op/i;
+const PVP = /pvp/i;
+
+/** Turns Steam's own genre and category names into subject IDs. Only what Steam states. */
+export function steamSubjects(genres: string[], categories: string[]): string[] {
+  const out = new Set<string>();
+  for (const g of genres) if (GENRE_SUBJECTS[g]) out.add(GENRE_SUBJECTS[g]);
+  const coop = categories.some((c) => COOP.test(c));
+  const single = categories.some((c) => /single-player/i.test(c));
+  if (coop) out.add("coop-games");
+  // Only games that are mainly player-versus-player count as competitive.
+  if (!coop && !single && categories.some((c) => PVP.test(c))) out.add("competitive-games");
+  if (categories.some((c) => /workshop/i.test(c))) out.add("game-mods");
+  return [...out];
+}
+
+/** Developer, publisher, genres, modes and year from an appdetails response. */
+export function parseMeta(appId: number, body: string, canonKey: string, now: Date = new Date()): GameMeta | null {
+  let parsed: DetailsResponse;
+  try {
+    parsed = JSON.parse(body) as DetailsResponse;
+  } catch {
+    return null;
+  }
+  const entry = parsed[String(appId)];
+  if (!entry?.success || !entry.data) return null;
+  const d = entry.data;
+  const strings = (xs: unknown): string[] => (Array.isArray(xs) ? xs.filter((x): x is string => typeof x === "string" && x.trim() !== "").map((x) => x.trim()) : []);
+  const genres = (d.genres ?? []).map((g) => g.description).filter((x): x is string => typeof x === "string");
+  const categories = (d.categories ?? []).map((c) => c.description).filter((x): x is string => typeof x === "string");
+  const year = /\b(19|20)\d{2}\b/.exec(d.release_date?.date ?? "")?.[0];
+  return {
+    canon: canonKey,
+    source: "steam",
+    sourceId: String(appId),
+    name: typeof d.name === "string" ? d.name : "",
+    developers: strings(d.developers),
+    publishers: strings(d.publishers),
+    genres,
+    tags: categories,
+    modes: categories.filter((c) => /single-player|multi-player|co-op|pvp|mmo/i.test(c)),
+    releaseYear: year ? Number(year) : null,
+    checkedAt: now.toISOString(),
+  };
+}
+
+/** Fetches Steam metadata for one game (by app ID, or an exact-name store search). Never guesses a match. */
+export async function fetchSteamMeta(get: Get, title: string, appId: number | null, now: Date = new Date()): Promise<GameMeta | "not_found" | "error"> {
+  try {
+    let id = appId;
+    if (id === null) {
+      const res = await get(searchUrl(title));
+      if (!res.ok) return "error";
+      const hit = pickSearchResult(title, res.text);
+      if (!hit) return "not_found";
+      id = hit.id;
+    }
+    const det = await get(detailsUrl(id));
+    if (!det.ok) return "error";
+    return parseMeta(id, det.text, canon(title), now) ?? "not_found";
+  } catch {
+    return "error";
   }
 }

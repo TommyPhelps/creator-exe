@@ -23,6 +23,7 @@ import type { Domain } from "./subjects.ts";
 import type { VideoType } from "./videoTypes.ts";
 import { GAMING_LIBRARY } from "./libraryGaming.ts";
 import { GAME_SPECIFIC_LIBRARY } from "./libraryGames.ts";
+import { VARIETY_LIBRARY } from "./libraryVariety.ts";
 
 export type Setup = "none" | "install" | "mods" | "hardware";
 
@@ -88,7 +89,57 @@ export interface IdeaSeed {
   anyGame?: boolean;
   /** "played": only when your library or memory shows you've played the game. First playthroughs are "unplayed" automatically. */
   when?: "played" | "unplayed";
+  // ---- Since v0.1.3
+  /** Why the video exists beyond "I played it". Ideas without one are never suggested for YouTube. */
+  reason?: PremiseKind;
+  /** How well it works as a live stream (derived from the video type when left out). */
+  live?: LiveFit;
+  /** False for stream-only ideas (Casual Live). */
+  video?: boolean;
+  /** Format ideas for any game of these genres (library and catalog games); {game} is the game. */
+  forGenres?: string[];
+  /** Where recording usually starts: a fresh start, your existing save, or anywhere. */
+  startFrom?: StartFrom;
+  /** Kept so old feedback still resolves, but never suggested. */
+  retired?: boolean;
+  /** Only for games you own (from your imported library). */
+  owned?: boolean;
 }
+
+/** The reason a video exists. "casual-live" is for Twitch only: a stream needs no premise. */
+export type PremiseKind =
+  | "discovery"
+  | "experiment"
+  | "mechanic"
+  | "situation"
+  | "observation"
+  | "challenge"
+  | "question"
+  | "story"
+  | "research"
+  | "mod"
+  | "making-it-run"
+  | "together"
+  | "casual-live";
+
+export const PREMISE_LABEL: Record<PremiseKind, string> = {
+  discovery: "A strange discovery",
+  experiment: "An experiment",
+  mechanic: "One mechanic, explored",
+  situation: "A situation worth showing",
+  observation: "A personal observation",
+  challenge: "A self-imposed rule",
+  question: "A question to answer",
+  story: "A story that happened",
+  research: "A bit of research",
+  mod: "Mods and fan work",
+  "making-it-run": "Making it run",
+  together: "With friends",
+  "casual-live": "Casual Live",
+};
+
+export type LiveFit = "great" | "ok" | "no";
+export type StartFrom = "new" | "save" | "anywhere";
 
 /** The hand-writable detail fields, also used to add specifics to one variant of a template. */
 export type SeedDetail = Partial<
@@ -1233,4 +1284,4 @@ const RETAG: Record<string, Partial<IdeaSeed>> = {
 export const GENERAL_LIBRARY: IdeaSeed[] = RAW_GENERAL.map((s) => ({ domain: "other", videoType: "general", ...s, ...(RETAG[s.key] ?? {}) }));
 
 /** Everything the Idea Machine can suggest: the gaming library first, then the general one (only used when Content Focus allows it). */
-export const IDEA_LIBRARY: IdeaSeed[] = [...GAME_SPECIFIC_LIBRARY, ...GAMING_LIBRARY, ...GENERAL_LIBRARY];
+export const IDEA_LIBRARY: IdeaSeed[] = [...GAME_SPECIFIC_LIBRARY, ...VARIETY_LIBRARY, ...GAMING_LIBRARY, ...GENERAL_LIBRARY];

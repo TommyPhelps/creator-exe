@@ -278,10 +278,10 @@ export const GAMING_LIBRARY: IdeaSeed[] = [
   }),
   seed({
     key: "first-hour-teaches",
-    title: "What {game}'s first hour teaches without saying a word",
+    title: "How {game} teaches you without saying a word",
     premise: "Replay the opening of a game you know well and catalogue everything it teaches through level design instead of text.",
     why: "A fresh angle on games you already know, so you can start without buying anything new.",
-    whatYouDo: "Replay the first hour slowly, pausing at every lesson, and narrate what it's teaching.",
+    whatYouDo: "Replay the opening slowly, pausing at every lesson, and narrate what it's teaching.",
     worthExploring: "Good openings are lessons in disguise; viewers rarely notice them consciously.",
     audience: "Design-curious players and fans of {game}.",
     requirements: ["{game}", OBS],

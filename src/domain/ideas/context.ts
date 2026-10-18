@@ -3,12 +3,13 @@
 // are remembered but kept out of recommendations on purpose. Things you
 // reject (tired of, never suggest) apply whatever their scope.
 import type { Db } from "../../platform/types.ts";
-import { listGames, listIdeaFeedback, listIdeas, listImpressions, listProfile, listVideoFeedback, listVideos } from "../../db/repos.ts";
+import { listGameMeta, listGames, listIdeaFeedback, listIdeas, listImpressions, listProfile, listVideoFeedback, listVideos } from "../../db/repos.ts";
 import { channelBoilerplate, readVideo, satisfactionBySubject } from "../channel/analyze.ts";
 import type { CreatorContext } from "./generator.ts";
 import { SUBJECT_BY_ID, subjectsForText } from "./subjects.ts";
 import { canon, catalogNames, findCatalogGame } from "../games/catalog.ts";
 import { indexLibrary } from "../games/library.ts";
+import { factsFromMeta } from "../games/meta.ts";
 
 function toSubjects(values: string[]): Set<string> {
   const out = new Set<string>();
@@ -20,7 +21,7 @@ function toSubjects(values: string[]): Set<string> {
 }
 
 export async function loadCreatorContext(db: Db): Promise<CreatorContext> {
-  const [profile, videos, videoFeedback, feedback, impressions, ideas, games] = await Promise.all([
+  const [profile, videos, videoFeedback, feedback, impressions, ideas, games, meta] = await Promise.all([
     listProfile(db),
     listVideos(db),
     listVideoFeedback(db),
@@ -28,6 +29,7 @@ export async function loadCreatorContext(db: Db): Promise<CreatorContext> {
     listImpressions(db),
     listIdeas(db),
     listGames(db),
+    listGameMeta(db),
   ]);
   const channel = (kind: string) => profile.filter((p) => p.kind === kind && p.scope === "channel").map((p) => p.value);
   const anyScope = (kind: string) => profile.filter((p) => p.kind === kind).map((p) => p.value);
@@ -57,5 +59,6 @@ export async function loadCreatorContext(db: Db): Promise<CreatorContext> {
     satisfaction: satisfactionBySubject(videos, videoFeedback),
     library: indexLibrary(games),
     playedGames: played,
+    facts: factsFromMeta(meta),
   };
 }

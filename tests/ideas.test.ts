@@ -97,7 +97,7 @@ test("familiar, adjacent and new modes steer within gaming", () => {
 });
 
 test("feedback blocks rejected ideas for a while and fades over time", () => {
-  const single = IDEA_LIBRARY.filter((x) => x.key === "dwarf-fortress-diary");
+  const single = IDEA_LIBRARY.filter((x) => x.key === "minecraft-old-versions");
   const target = generateIdeas({}, ctx(), { count: 1, rng: mulberry32(10), library: single }).ideas[0]!;
   assert.ok(target, "the concept is suggested before any feedback");
   const fb: IdeaFeedback[] = [{ id: "1", ideaKey: target.key, reaction: "not_interested", subjects: target.subjects, detail: {}, createdAt: daysAgo(1) }];

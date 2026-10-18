@@ -1,6 +1,6 @@
 // Turning ideas into projects, and helpers for project state.
 import type { NewProjectInput } from "../db/repos.ts";
-import type { Approach, Complexity, Idea, IdeaDetails, Project, ProjectTask, Stage } from "./types.ts";
+import type { Approach, Complexity, Destination, Idea, IdeaDetails, Project, ProjectTask, Stage } from "./types.ts";
 import { STAGES } from "./types.ts";
 import { subjectLabel } from "./ideas/subjects.ts";
 
@@ -30,8 +30,9 @@ export function approachesFor(d: IdeaDetails): Approach[] {
  * need (listed once, not duplicated into checklists), ownership, why it suits
  * you, your notes and where it came from.
  */
-export function projectFromIdea(idea: Idea, opts: { tonight?: boolean } = {}): NewProjectInput {
+export function projectFromIdea(idea: Idea, opts: { tonight?: boolean; destination?: Destination } = {}): NewProjectInput {
   const d = idea.details;
+  const destination: Destination = opts.destination ?? d?.destination ?? "youtube";
   const tonight = d?.tonight ?? null;
   const lines = (xs: string[]) => xs.map((x) => `- ${x}`).join("\n");
   const firstFive = (opts.tonight ? tonight?.firstFive : undefined) ?? d?.firstStep ?? tonight?.firstFive ?? "";
@@ -44,6 +45,7 @@ export function projectFromIdea(idea: Idea, opts: { tonight?: boolean } = {}): N
     ideaId: idea.id,
     subjects: idea.subjects,
     stage: "preparing",
+    destination,
     details: d
       ? {
           research: d.research === "light" ? "Light research: a couple of sources to confirm facts." : d.research === "moderate" ? "Moderate research: gather a handful of reliable sources." : "Deep research: build a source list before recording.",

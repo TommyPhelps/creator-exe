@@ -29,6 +29,10 @@ export interface CatalogGame {
   yours?: boolean;
   /** A free mod or modpack that still needs this (catalog) game to play. */
   requires?: string;
+  /** Developer, for variety (no single studio should dominate suggestions). */
+  dev?: string;
+  /** Series or family, e.g. "The Elder Scrolls", for the same reason. */
+  series?: string;
   domain?: Domain;
 }
 
@@ -127,6 +131,30 @@ export const GAME_CATALOG: CatalogGame[] = [
   g("The Dark Mod", 2013, ["immersive-sims", "fan-projects", "free-games"], "free", { accessNote: "Free standalone stealth game that began as a Doom 3 total conversion." }),
   g("S.T.A.L.K.E.R. Anomaly", 2018, ["fan-projects", "survival-games", "game-mods", "free-games"], "free", { accessNote: "Free standalone mod; doesn't need the original games." }),
   g("OpenTTD", 2004, ["simulation-games", "fan-projects", "free-games"], "free", { accessNote: "Free open-source remake that runs with free graphics sets." }),
+  // ------------------------------------------------ v0.1.3: co-op, party and weird online games
+  g("Lethal Company", 2023, ["coop-games", "horror-games", "indie-games"], "paid", { dev: "Zeekerss" }),
+  g("Content Warning", 2024, ["coop-games", "horror-games", "bizarre-games"], "paid", { dev: "Skog, Zorro, Wilnyl, Philip and thePetHen" }),
+  g("Phasmophobia", 2020, ["coop-games", "horror-games"], "paid", { dev: "Kinetic Games" }),
+  g("Human: Fall Flat", 2016, ["coop-games", "puzzle-games", "game-mechanics"], "paid", { dev: "No Brakes Games" }),
+  g("Garry's Mod", 2006, ["sandbox-games", "coop-games", "game-mods"], "paid", { dev: "Facepunch Studios" }),
+  g("The Jackbox Party Pack 3", 2016, ["party-games"], "paid", { dev: "Jackbox Games", series: "Jackbox Party Pack", aliases: ["Jackbox Party Pack 3"] }),
+  g("WEBFISHING", 2024, ["coop-games", "bizarre-games", "indie-games"], "paid", { dev: "lamedeveloper", aliases: ["Webfishing"] }),
+  // ------------------------------------------------ v0.1.3: simulation, driving and sandbox
+  g("PowerWash Simulator", 2022, ["simulation-games"], "paid", { dev: "FuturLab" }),
+  g("Euro Truck Simulator 2", 2012, ["simulation-games", "racing-games"], "paid", { dev: "SCS Software", aliases: ["ETS2"] }),
+  g("Kerbal Space Program", 2015, ["simulation-games", "sandbox-games", "game-mechanics"], "paid", { dev: "Squad", aliases: ["KSP"] }),
+  g("Teardown", 2022, ["sandbox-games", "game-mechanics"], "paid", { dev: "Tuxedo Labs" }),
+  g("Getting Over It with Bennett Foddy", 2017, ["bizarre-games", "game-mechanics"], "paid", { dev: "Bennett Foddy", aliases: ["Getting Over It"] }),
+  g("QWOP", 2008, ["bizarre-games", "free-games", "game-mechanics"], "free", { dev: "Bennett Foddy", accessNote: "Free to play in a web browser on its creator's site." }),
+  // ------------------------------------------------ v0.1.3: puzzles
+  g("Portal 2", 2011, ["puzzle-games", "game-mods"], "paid", { dev: "Valve", series: "Portal" }),
+  g("Opus Magnum", 2017, ["puzzle-games", "game-mechanics"], "paid", { dev: "Zachtronics" }),
+  g("Chants of Sennaar", 2023, ["puzzle-games", "adventure-games", "game-worlds"], "paid", { dev: "Rundisc" }),
+  // ------------------------------------------------ v0.1.3: strategy and tactics
+  g("Into the Breach", 2018, ["tactics-games", "strategy-games", "indie-games"], "paid", { dev: "Subset Games" }),
+  g("Frostpunk", 2018, ["strategy-games", "simulation-games", "survival-games"], "paid", { dev: "11 bit studios" }),
+  g("Crusader Kings III", 2020, ["tactics-games", "strategy-games", "simulation-games"], "paid", { dev: "Paradox Development Studio", aliases: ["CK3"] }),
+  g("Yakuza 0", 2015, ["game-worlds", "bizarre-games"], "paid", { dev: "Ryu Ga Gotoku Studio", series: "Yakuza" }),
   // ------------------------------------------------ placeholders (you pick the actual game)
   g("a free horror game on itch.io", undefined, ["horror-games", "indie-games", "free-games"], "free", { era: "modern", generic: true, accessNote: "Pick one marked free on itch.io." }),
   g("a free game on itch.io", undefined, ["indie-games", "free-games"], "free", { era: "modern", generic: true, accessNote: "Pick one marked free on itch.io." }),
@@ -145,6 +173,38 @@ export const GAME_CATALOG: CatalogGame[] = [
   g("RPG Maker", 2015, ["game-dev-tools"], "paid", { domain: "gaming-tech", aliases: ["RPG Maker MV", "RPG Maker MZ", "RPG Maker 2003"] }),
 ];
 
+// Developer and series for the studios that showed up most in v0.1.2 batches,
+// plus every v0.1.3 addition. Used only to spread suggestions out.
+const FAMILY: Record<string, { dev?: string; series?: string }> = {
+  "The Witcher 3: Wild Hunt": { dev: "CD Projekt Red", series: "The Witcher" },
+  "The Witcher": { dev: "CD Projekt Red", series: "The Witcher" },
+  "Elden Ring": { dev: "FromSoftware" },
+  "Dark Souls": { dev: "FromSoftware", series: "Dark Souls" },
+  "Dark Souls II": { dev: "FromSoftware", series: "Dark Souls" },
+  "Dark Souls III": { dev: "FromSoftware", series: "Dark Souls" },
+  "King's Field: The Ancient City": { dev: "FromSoftware", series: "King's Field" },
+  "The Elder Scrolls III: Morrowind": { dev: "Bethesda Game Studios", series: "The Elder Scrolls" },
+  "The Elder Scrolls IV: Oblivion": { dev: "Bethesda Game Studios", series: "The Elder Scrolls" },
+  "The Elder Scrolls V: Skyrim": { dev: "Bethesda Game Studios", series: "The Elder Scrolls" },
+  "The Elder Scrolls: Arena": { dev: "Bethesda Softworks", series: "The Elder Scrolls" },
+  "The Elder Scrolls II: Daggerfall": { dev: "Bethesda Softworks", series: "The Elder Scrolls" },
+  "Enderal: Forgotten Stories": { dev: "SureAI", series: "The Elder Scrolls" },
+  "Fallout 2": { dev: "Black Isle Studios", series: "Fallout" },
+  "Fallout: New Vegas": { dev: "Obsidian Entertainment", series: "Fallout" },
+  "Minecraft": { dev: "Mojang Studios", series: "Minecraft" },
+  Thief: { dev: "Looking Glass Studios", series: "Thief" },
+  "Thief II: The Metal Age": { dev: "Looking Glass Studios", series: "Thief" },
+  "System Shock 2": { dev: "Irrational Games" },
+  "Ultima Underworld: The Stygian Abyss": { dev: "Blue Sky Productions" },
+  "Deus Ex": { dev: "Ion Storm" },
+  "Anachronox": { dev: "Ion Storm" },
+  "Arx Fatalis": { dev: "Arkane Studios" },
+  "Gothic": { dev: "Piranha Bytes", series: "Gothic" },
+  "Gothic II": { dev: "Piranha Bytes", series: "Gothic" },
+  "Half-Life": { dev: "Valve" },
+  "Mount & Blade: Warband": { dev: "TaleWorlds Entertainment" },
+};
+
 /** Lower-case title with punctuation, articles and edition suffixes removed, for matching. */
 export function canon(title: string): string {
   return title
@@ -157,6 +217,14 @@ export function canon(title: string): string {
     .replace(/^the /, "")
     .trim()
     .replace(/\s+/g, " ");
+}
+
+for (const game of GAME_CATALOG) {
+  const f = FAMILY[game.title];
+  if (f) {
+    game.dev ??= f.dev;
+    game.series ??= f.series;
+  }
 }
 
 const BY_CANON = new Map<string, CatalogGame>();

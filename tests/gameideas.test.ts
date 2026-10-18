@@ -17,7 +17,7 @@ const GROUPS: Record<string, string[]> = {
   Warband: ["Mount & Blade: Warband"],
   "Skyrim and mods": ["The Elder Scrolls V: Skyrim", "Enderal: Forgotten Stories"],
   "Older PC RPGs": ["The Elder Scrolls II: Daggerfall", "Arcanum: Of Steamworks and Magick Obscura", "Gothic", "Might and Magic VI: The Mandate of Heaven"],
-  "Thief and immersive sims": ["Thief", "Arx Fatalis", "Deus Ex"],
+  "Thief and immersive sims": ["Thief", "Arx Fatalis", "Deus Ex", "The Dark Mod"],
   "Minecraft modpacks": ["Minecraft", "RLCraft", "Create: Above and Beyond", "SkyFactory 4", "GregTech: New Horizons"],
   "Elden Ring": ["Elden Ring"],
   "Dark Souls": ["Dark Souls"],

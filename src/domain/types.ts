@@ -161,6 +161,16 @@ export interface IdeaDetails {
   visualBeats?: string[];
   /** True when hook/moments/approaches were written for this specific game, not a template. */
   specific?: boolean;
+  /** Since v0.1.3: why the video exists (a PremiseKind), how well it works live, and where recording starts. */
+  reason?: string;
+  live?: "great" | "ok" | "no";
+  /** False for stream-only ideas (Casual Live). */
+  video?: boolean;
+  startFrom?: "new" | "save" | "anywhere";
+  /** A general format applied to this game: nothing specific is claimed about it. */
+  general?: boolean;
+  /** What the batch was for when this idea was suggested. */
+  destination?: "youtube" | "twitch" | "both";
 }
 
 export interface Approach {

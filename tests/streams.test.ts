@@ -114,3 +114,68 @@ test("backups from v0.1.2 restore into v5, and v5 backups keep streams and momen
   assert.equal((await repo.listMoments(again, p.id))[0]?.note, "found it");
   assert.equal((await repo.getProject(again, p.id))?.destination, "both");
 });
+
+// ---------------------------------------------------------------- Pass B: stream preparation and stream -> video
+import { startProjectFromIdea } from "../src/domain/handoff.ts";
+import { formatOffset, markMoment, parseOffset, streamTitleIdeas, STREAM_CHECKLIST, youtubeFromStream, GO_LIVE_LIMIT } from "../src/domain/streams.ts";
+import { emptyContext, generateIdeas } from "../src/domain/ideas/generator.ts";
+import { mulberry32 } from "../src/lib/util.ts";
+
+test("starting a Twitch idea plans a session and the pre-stream checklist; YouTube ideas don't", async () => {
+  const db = memoryDb();
+  await migrate(db);
+  const g = generateIdeas({ destination: "twitch" }, emptyContext(), { count: 1, rng: mulberry32(3) }).ideas[0]!;
+  const idea = await repo.saveIdea(db, { origin: "library", libraryKey: g.key, title: g.title, premise: g.premise, details: g.details, subjects: g.subjects, status: "saved" });
+  const { project } = await startProjectFromIdea(db, idea);
+  assert.equal(project.destination, "twitch");
+  const [s] = await repo.listSessions(db, project.id);
+  assert.ok(s, "a planned session");
+  assert.equal(s.startedAt, null);
+  assert.equal(s.mode, "concept");
+  assert.ok(s.title.length > 0 && s.title.length <= 140);
+  assert.deepEqual((await repo.listTasks(db, project.id)).filter((t) => t.list === "stream").map((t) => t.label), STREAM_CHECKLIST);
+
+  const casual = generateIdeas({ destination: "twitch", streamMode: "casual" }, emptyContext(), { count: 1, rng: mulberry32(4) }).ideas[0]!;
+  const ci = await repo.saveIdea(db, { origin: "library", libraryKey: casual.key, title: casual.title, premise: casual.premise, details: casual.details, subjects: casual.subjects, status: "saved" });
+  const c = await startProjectFromIdea(db, ci);
+  assert.equal((await repo.listSessions(db, c.project.id))[0]?.mode, "casual");
+
+  const yt = generateIdeas({}, emptyContext(), { count: 1, rng: mulberry32(5) }).ideas[0]!;
+  const yi = await repo.saveIdea(db, { origin: "library", libraryKey: yt.key, title: yt.title, premise: yt.premise, details: yt.details, subjects: yt.subjects, status: "saved" });
+  const y = await startProjectFromIdea(db, yi);
+  assert.equal(y.project.destination, "youtube");
+  assert.equal((await repo.listSessions(db, y.project.id)).length, 0);
+});
+
+test("marking a moment stores the time since going live; timestamps read both ways", async () => {
+  const db = memoryDb();
+  await migrate(db);
+  const p = await repo.createProject(db, { title: "Stream", destination: "twitch" });
+  const s = (await repo.updateSession(db, (await repo.createSession(db, p.id)).id, { startedAt: "2026-10-17T20:00:00.000Z" }))!;
+  const m = await markMoment(db, s, "the floor vanished", new Date("2026-10-17T21:02:03.000Z"));
+  assert.equal(m.offsetSeconds, 3723);
+  assert.equal(m.atText, "1:02:03");
+  assert.equal(formatOffset(59), "0:00:59");
+  assert.equal(parseOffset("1:02:03"), 3723);
+  assert.equal(parseOffset("62:03"), 3723);
+  assert.equal(parseOffset("1h2m3s"), 3723);
+  assert.equal(parseOffset("around the start"), null);
+  assert.equal(GO_LIVE_LIMIT, 140);
+  assert.deepEqual(streamTitleIdeas({ game: "Euro Truck Simulator 2", title: "x", hook: "y", mode: "casual" }), ["Playing Euro Truck Simulator 2", "Euro Truck Simulator 2, no plan"]);
+});
+
+test("a YouTube video from a stream is a separate, linked project that keeps the stream's notes and moments", async () => {
+  const db = memoryDb();
+  await migrate(db);
+  const stream = await repo.createProject(db, { title: "Weird indie night", destination: "twitch", details: { game: "WEBFISHING" } });
+  const s = await repo.createSession(db, stream.id, { mode: "casual", startedAt: "2026-10-17T20:00:00.000Z", vodUrl: "https://www.twitch.tv/videos/123", notes: "Lobby got strange around the guitar." });
+  await repo.addMoment(db, stream.id, { sessionId: s.id, atText: "0:42:10", note: "everyone played the same song" });
+  const video = await youtubeFromStream(db, stream.id, "The night a fishing lobby formed a band");
+  assert.equal(video.destination, "youtube");
+  assert.equal(video.sourceProjectId, stream.id);
+  assert.match(video.details.myNotes, /https:\/\/www\.twitch\.tv\/videos\/123/);
+  assert.match(video.details.myNotes, /0:42:10\s+everyone played the same song/);
+  assert.match(video.details.myNotes, /Lobby got strange/);
+  assert.equal((await repo.listMoments(db, stream.id)).length, 1, "the stream keeps its own moments");
+  assert.equal((await repo.getProject(db, stream.id))?.destination, "twitch", "the stream stays a stream");
+});

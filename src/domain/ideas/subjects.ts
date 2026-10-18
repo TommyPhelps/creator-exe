@@ -40,6 +40,18 @@ export const SUBJECTS: Subject[] = [
   { id: "fan-projects", label: "Fan projects & remakes", domain: "gaming", adjacent: ["game-mods", "game-preservation", "game-mysteries"], keywords: ["fan game", "fan remake", "total conversion", "fan project", "demake", "fan-made"] },
   { id: "game-worlds", label: "Fascinating game worlds", domain: "gaming", adjacent: ["rpg-classic", "open-world-rpg", "adventure-games", "horror-games"], keywords: ["lore", "worldbuilding", "game world", "atmospheric", "discovery"] },
   { id: "game-mechanics", label: "Unusual game mechanics", domain: "gaming", adjacent: ["immersive-sims", "simulation-games", "bizarre-games", "challenge-runs"], keywords: ["game mechanic", "mechanics", "game physics", "game design"] },
+  // v0.1.3: genres that were missing, so libraries and batches can actually vary.
+  { id: "rpgs", label: "RPGs", domain: "gaming", adjacent: ["rpg-classic", "open-world-rpg", "jrpg", "game-worlds"], keywords: ["role-playing", "roleplaying game"] },
+  { id: "racing-games", label: "Racing & driving games", domain: "gaming", adjacent: ["simulation-games", "game-mechanics", "sandbox-games"], keywords: ["racing", "driving", "rally", "truck simulator", "kart"] },
+  { id: "puzzle-games", label: "Puzzle games", domain: "gaming", adjacent: ["adventure-games", "game-mechanics", "indie-games"], keywords: ["puzzle", "puzzler", "zachtronics"] },
+  { id: "jrpg", label: "JRPGs", domain: "gaming", adjacent: ["rpg-classic", "game-worlds", "nostalgic-games"], keywords: ["jrpg", "persona", "final fantasy", "dragon quest", "yakuza", "chrono trigger"] },
+  { id: "tactics-games", label: "Tactics & grand strategy", domain: "gaming", adjacent: ["strategy-games", "game-mechanics", "simulation-games"], keywords: ["turn-based tactics", "xcom", "grand strategy", "crusader kings", "into the breach"] },
+  { id: "sandbox-games", label: "Sandbox experiments", domain: "gaming", adjacent: ["simulation-games", "game-mechanics", "game-mods"], keywords: ["sandbox", "physics sandbox", "garry's mod", "teardown", "besiege"] },
+  { id: "coop-games", label: "Co-op with friends", domain: "gaming", adjacent: ["party-games", "horror-games", "survival-games"], keywords: ["co-op", "coop", "with friends", "lethal company", "phasmophobia"] },
+  { id: "party-games", label: "Party & social games", domain: "gaming", adjacent: ["coop-games", "bizarre-games"], keywords: ["party game", "jackbox", "social game", "party pack"] },
+  { id: "competitive-games", label: "Competitive multiplayer", domain: "gaming", adjacent: ["coop-games"], keywords: ["competitive", "ranked", "pvp", "esports"] },
+  { id: "platformers", label: "Platformers", domain: "gaming", adjacent: ["indie-games", "game-mechanics", "challenge-runs"], keywords: ["platformer", "precision platformer"] },
+  { id: "shooters", label: "Shooters & boomer shooters", domain: "gaming", adjacent: ["retro-pc-games", "immersive-sims", "game-mechanics"], keywords: ["boomer shooter", "fps", "first-person shooter", "retro shooter"] },
   { id: "bizarre-games", label: "Bizarre & experimental games", domain: "gaming", adjacent: ["indie-games", "game-mechanics", "free-games"], keywords: ["weird game", "bizarre", "experimental game", "strange game", "surreal"] },
   // ---------------------------------------------------------------- gaming-adjacent tech
   { id: "game-dev-tools", label: "Game-making tools", domain: "gaming-tech", adjacent: ["game-engines", "game-history", "fan-projects"], keywords: ["rpg maker", "game maker", "klik", "game dev", "pico-8"] },

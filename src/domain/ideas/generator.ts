@@ -29,13 +29,15 @@ import type {
   TimeBox,
   TonightPlan,
 } from "../types.ts";
-import { IDEA_LIBRARY, type IdeaSeed, type SeedDetail } from "./library.ts";
+import { IDEA_LIBRARY, type IdeaSeed, type LiveFit, type PremiseKind, type SeedDetail } from "./library.ts";
+import { CASUAL_LIVE, GAME_FORMATS } from "./libraryVariety.ts";
+import type { Destination, StreamMode } from "../types.ts";
 import { ANY_GAME_FORMATS, FOCUS_GAMES, HAND_DETAILS } from "./libraryGames.ts";
 import { parseRequests, type GameRequest } from "./request.ts";
 import { adjacentTo, subjectDomain, subjectLabel, subjectsForText, type Domain } from "./subjects.ts";
 import { DEFAULT_FOCUS, allocateDomains, isExploring, presetFocus, share, type ContentFocus } from "./focus.ts";
 import { videoTypeLabel, videoTypeStyle, type VideoType } from "./videoTypes.ts";
-import { canon, catalogNames, findCatalogGame, type CatalogGame, type Era } from "../games/catalog.ts";
+import { GAME_CATALOG, canon, catalogNames, findCatalogGame, type CatalogGame, type Era } from "../games/catalog.ts";
 import { accessFor, accessLabel, findInLibrary, indexLibrary, noPurchaseNeeded, type AccessStatus, type LibraryIndex } from "../games/library.ts";
 
 export type InterestMode = "familiar" | "adjacent" | "new" | "surprise";
@@ -67,6 +69,20 @@ export interface GeneratorControls {
   inspiration?: string[] | null;
   /** One-off "Explore outside my niche" for this batch only. */
   explore?: boolean;
+  /** Since v0.1.3: what you're making. YouTube needs a premise; Twitch can be casual. */
+  destination?: Destination | null;
+  /** Twitch only: Casual Live (no premise) or Concept Stream (something to explore). */
+  streamMode?: StreamMode | null;
+}
+
+/** What CREATOR.EXE knows about a game from outside sources (Steam now, IGDB later). */
+export interface GameFacts {
+  developers: string[];
+  publishers: string[];
+  /** Subject IDs derived from the source's genres, categories and tags. */
+  genres: string[];
+  modes: string[];
+  year: number | null;
 }
 
 export interface CreatorContext {
@@ -91,6 +107,8 @@ export interface CreatorContext {
   satisfaction: Map<string, number>;
   /** Your imported game library (empty when nothing was imported). */
   library: LibraryIndex;
+  /** Facts per game (canon name) from Steam and, later, IGDB. */
+  facts?: Map<string, GameFacts>;
   /** Canonical names of library games you've actually spent time with or rated highly. */
   playedGames: Set<string>;
 }
@@ -111,6 +129,7 @@ export function emptyContext(): CreatorContext {
     satisfaction: new Map(),
     library: indexLibrary([]),
     playedGames: new Set(),
+    facts: new Map(),
   };
 }
 
@@ -192,13 +211,122 @@ export interface Candidate {
   hand: SeedDetail | null;
   /** Kept so old feedback still resolves, but no longer suggested (see libraryGames.ts). */
   retired: boolean;
+  /** Why the video exists; null means "just playing", which is never suggested for YouTube. */
+  reason: PremiseKind | null;
+  live: LiveFit;
+  video: boolean;
+  /** A general format with a game slotted in (library or catalog game). */
+  general: boolean;
+  /** Developer and series groups, for spreading suggestions out. */
+  groups: string[];
+}
+
+const REASON_BY_TYPE: Partial<Record<VideoType, PremiseKind>> = {
+  "hidden-gem": "discovery",
+  roulette: "discovery",
+  "mod-showcase": "mod",
+  challenge: "challenge",
+  mechanics: "mechanic",
+  experiment: "experiment",
+  diary: "story",
+  "tech-fix": "making-it-run",
+  analysis: "observation",
+  retrospective: "observation",
+  investigation: "research",
+  comparison: "question",
+  "short-take": "situation",
+  revisit: "observation",
+  general: "experiment",
+  // first-playthrough: only with an explicit reason; "I played it" isn't one.
+};
+const LIVE_BY_TYPE: Partial<Record<VideoType, LiveFit>> = {
+  "first-playthrough": "great",
+  roulette: "great",
+  challenge: "great",
+  experiment: "great",
+  "mod-showcase": "great",
+  mechanics: "ok",
+  diary: "ok",
+  "tech-fix": "ok",
+  "hidden-gem": "ok",
+  revisit: "ok",
+  analysis: "no",
+  retrospective: "no",
+  investigation: "no",
+  comparison: "no",
+  "short-take": "no",
+  general: "no",
+};
+
+/** Games general formats can be applied to: your library (owned or ownership unknown), then the catalog. */
+function formatGames(ctx: CreatorContext, facts: Map<string, GameFacts>): { title: string; genres: string[]; inLibrary: boolean }[] {
+  const out = new Map<string, { title: string; genres: string[]; inLibrary: boolean }>();
+  const gamingOnly = (ids: string[]) => ids.filter((x) => subjectDomain(x) === "gaming" && x !== "video-games");
+  for (const g of ctx.library.byCanon.values()) {
+    if (g.ownership === "not_owned" || g.ownership === "wishlist") continue;
+    const cat = findCatalogGame(g.title);
+    if (cat?.generic || cat?.domain === "gaming-tech") continue;
+    const title = cat?.title ?? g.title;
+    const f = facts.get(canon(title)) ?? facts.get(g.canon);
+    const genres = gamingOnly([...new Set([...(cat?.genres ?? []), ...(f?.genres ?? []), ...subjectsForText(g.tags.join(", "))])]);
+    out.set(canon(title), { title, genres, inLibrary: true });
+  }
+  for (const cat of GAME_CATALOG) {
+    if (cat.generic || cat.domain === "gaming-tech" || out.has(canon(cat.title))) continue;
+    out.set(canon(cat.title), { title: cat.title, genres: gamingOnly(cat.genres), inLibrary: false });
+  }
+  return [...out.values()];
+}
+
+/** Developer and series groups of a set of games (catalog first, then outside facts). */
+export function gameGroups(names: string[], facts?: Map<string, GameFacts>): string[] {
+  const out = new Set<string>();
+  for (const n of names) {
+    const cat = findCatalogGame(n);
+    if (cat?.generic) continue;
+    if (cat?.dev) out.add(`dev:${cat.dev}`);
+    if (cat?.series) out.add(`series:${cat.series}`);
+    const f = facts?.get(cat ? canon(cat.title) : canon(n)) ?? facts?.get(canon(n));
+    for (const d of f?.developers ?? []) out.add(`dev:${d}`);
+  }
+  return [...out];
 }
 
 /** Template ideas a hand-written game idea now covers. */
 const SUPERSEDED = new Set(["every-way-one-level:deus-ex", "mechanic-tested:thief-s-light-and-sound-stealth", "mechanic-tested:morrowind-s-alchemy", "npc-directions:morrowind", "map-by-hand:morrowind"]);
 const FOCUS = new Set(FOCUS_GAMES.map((t) => canon(t)));
 /** Whole concepts no longer suggested (v0.1.2): "Is X an overlooked classic?" and "Is X still worth playing?" formats. */
-const RETIRED_SEEDS = new Set(["overlooked-pc-game", "free-classic-tested"]);
+const RETIRED_SEEDS = new Set([
+  "overlooked-pc-game",
+  "free-classic-tested",
+  // v0.1.3: no Let's Plays. Plain "first time" / "first hour" / episodic diary formats go.
+  "first-time-classic",
+  "first-hour-test",
+  "er-first-ten-hours",
+  "ds-first-bell",
+  "w3-hearts-of-stone",
+  "modpack-diary",
+  "dwarf-fortress-diary",
+  "any-first-hour",
+  "any-one-rule", // replaced by fmt-one-rule
+  "any-notebook", // replaced by fmt-paper-notebook
+]);
+/** Ideas that only make sense as a stream (picking a random game to play is a stream, not a video). */
+const STREAM_ONLY = new Set(["backlog-random-pick"]);
+/** Explicit reasons for older ideas whose type alone doesn't give one. */
+const REASONS: Record<string, PremiseKind> = {
+  "mw-journal-only": "challenge",
+  "gothic-nobody": "observation",
+  "mc-gtnh-hour-one": "experiment",
+  "strange-game-first": "discovery",
+  "ancestors-of-souls": "research",
+  "adventure-no-walkthrough": "challenge",
+  "learn-from-manual": "challenge",
+  "strange-simulator": "discovery",
+  "any-one-rule": "challenge",
+  "any-notebook": "experiment",
+  "any-return": "observation",
+};
 
 export function slugify(s: string): string {
   return s
@@ -230,10 +358,16 @@ function candidateFor(seed: IdeaSeed, variant: string | null): Candidate {
   const names = catalog.map((c, i) => c?.title ?? gameNames[i] ?? "");
   // A template that slots in one of the focus games, with nothing written for that game: retire it.
   const genericFocus = !hand && variant !== null && names.length === 1 && FOCUS.has(canon(names[0] ?? ""));
+  const reason = seed.reason ?? REASONS[seed.key] ?? REASON_BY_TYPE[seed.videoType ?? "general"] ?? null;
   return {
     key,
     hand,
-    retired: SUPERSEDED.has(key) || RETIRED_SEEDS.has(seed.key) || genericFocus,
+    retired: SUPERSEDED.has(key) || RETIRED_SEEDS.has(seed.key) || !!seed.retired || genericFocus,
+    reason,
+    live: seed.live ?? LIVE_BY_TYPE[seed.videoType ?? "general"] ?? "ok",
+    video: seed.video !== false && !STREAM_ONLY.has(seed.key) && reason !== "casual-live",
+    general: !!seed.forGenres || !!seed.anyGame || seed.key === CASUAL_LIVE.key,
+    groups: gameGroups(names),
     seed,
     variant,
     gameNames: names,
@@ -343,6 +477,11 @@ export function materialize(c: Candidate, reasons: string[] = [], forTonight = f
       ...(s.moments?.length ? { moments: s.moments.map(f) } : {}),
       ...(s.visualBeats?.length ? { visualBeats: s.visualBeats.map(f) } : {}),
       ...(specific ? { specific } : {}),
+      ...(c.reason ? { reason: c.reason } : {}),
+      live: c.live,
+      video: c.video,
+      ...(s.startFrom ? { startFrom: s.startFrom } : {}),
+      ...(c.general ? { general: true } : {}),
     },
   };
 }
@@ -478,7 +617,29 @@ export function generateIdeas(controls: GeneratorControls, ctx: CreatorContext, 
   const now = opts.now ?? new Date();
   const mode: GenMode = controls.mode ?? "standard";
   const focus: ContentFocus = controls.explore ? presetFocus("explore") : (opts.focus ?? DEFAULT_FOCUS);
-  const all = expandLibrary(opts.library ?? IDEA_LIBRARY).filter((c) => !c.retired);
+  const facts = ctx.facts ?? new Map<string, GameFacts>();
+  const destination: Destination = controls.destination ?? "youtube";
+  const allRaw = expandLibrary(opts.library ?? IDEA_LIBRARY);
+  const byKey = new Map(allRaw.map((c) => [c.key, c]));
+  const all = allRaw.filter((c) => !c.retired);
+  const push = (c: Candidate, extraGenres: string[] = []) => {
+    if (c.retired || byKey.has(c.key)) return;
+    if (extraGenres.length) c.subjects = [...new Set([...c.subjects, ...extraGenres])];
+    c.groups = gameGroups(c.gameNames, facts);
+    byKey.set(c.key, c);
+    all.push(c);
+  };
+  // General formats for games beyond the hand-written ones: your library first, then the catalog.
+  // (Skipped when a test passes its own library.)
+  if (!opts.library) {
+    for (const g of formatGames(ctx, facts)) {
+      for (const f of GAME_FORMATS) {
+        if (!f.forGenres?.some((x) => x === "*" || g.genres.includes(x))) continue;
+        push(candidateFor(f, g.title), g.genres);
+      }
+      if (destination === "twitch" && (g.inLibrary || ctx.library.size === 0)) push(candidateFor(CASUAL_LIVE, g.title), g.genres);
+    }
+  }
   const notes: string[] = [];
   const blocked = blockedKeys(ctx.feedback, now);
   const learned = learnFromFeedback(ctx.feedback, now);
@@ -491,6 +652,9 @@ export function generateIdeas(controls: GeneratorControls, ctx: CreatorContext, 
   const knownSubjects = new Set([...ctx.familiarSubjects, ...ctx.favoriteSubjects]);
   for (const name of ctx.favoriteGames) for (const s of findCatalogGame(name)?.genres ?? []) knownSubjects.add(s);
   const adjacent = adjacentTo(knownSubjects);
+  const BROAD = new Set(["video-games", "game-worlds", "indie-games", "game-mechanics"]);
+  const favoriteGenres = new Set<string>();
+  for (const name of ctx.favoriteGames) for (const x of findCatalogGame(name)?.genres ?? []) if (!BROAD.has(x)) favoriteGenres.add(x);
   const inspiration = (controls.inspiration ?? []).map((n) => n.trim()).filter(Boolean);
   const requests: GameRequest[] = parseRequests(inspiration);
   const inspirationCanon = new Set(requests.flatMap((r) => [...r.names]));
@@ -504,7 +668,10 @@ export function generateIdeas(controls: GeneratorControls, ctx: CreatorContext, 
   };
   // Games CREATOR.EXE has no notes on: offer neutral formats with your game slotted in, and say so.
   for (const r of requests.filter((x) => x.unknown)) {
-    for (const seed of ANY_GAME_FORMATS) all.push(candidateFor(seed, r.title));
+    // Genre unknown, so only the formats that fit almost any game.
+    const anyGame = GAME_FORMATS.filter((f) => f.forGenres?.includes("*") || f.key === "fmt-one-rule" || f.key === "fmt-paper-notebook");
+    for (const seed of [...ANY_GAME_FORMATS, ...anyGame]) push(candidateFor(seed, r.title));
+    if (destination === "twitch") push(candidateFor(CASUAL_LIVE, r.title));
     notes.push(`CREATOR.EXE has no notes on "${r.title}" yet, so its ideas are general formats with nothing claimed about the game itself.`);
   }
   // Have you played it? Library playtime (2+ hours), a rating, favourite or status counts.
@@ -564,6 +731,14 @@ export function generateIdeas(controls: GeneratorControls, ctx: CreatorContext, 
       continue;
     }
     if (mode === "tonight" && access.kind === "not_owned") continue;
+    // YouTube needs a reason for the video to exist; Twitch can be a casual stream.
+    if (destination !== "twitch" && (!c.video || c.reason === null)) continue;
+    if (destination !== "youtube" && c.live === "no") continue;
+    if (destination === "twitch" && controls.streamMode === "casual" && c.reason !== "casual-live") continue;
+    if (destination === "twitch" && controls.streamMode === "concept" && c.reason === "casual-live") continue;
+    if (s.owned && !(access.kind === "owned" && access.via === "library")) continue;
+    // Competitive multiplayer only when you ask for it.
+    if (c.subjects.includes("competitive-games") && !controls.genres?.includes("competitive-games") && !requests.some((r) => matchesRequest(c, r))) continue;
     // A "first time" video about a game you've already played isn't honest; a return visit needs that you have.
     const played = c.gameNames.length > 0 && wasPlayed(c);
     if (played && (c.videoType === "first-playthrough" || s.when === "unplayed")) {
@@ -639,6 +814,15 @@ export function generateIdeas(controls: GeneratorControls, ctx: CreatorContext, 
   const recentGames = new Map<string, number>();
   const recentTypes = new Map<string, number>();
   const recentDomains: Domain[] = [];
+  // Developer/series exposure over your most recent suggestions (up to 45, last 14 days).
+  const recentGroups = new Map<string, number>();
+  let exposureWindow = 0;
+  for (const imp of [...ctx.impressions].sort((a, b) => b.shownAt.localeCompare(a.shownAt))) {
+    if (exposureWindow >= 45 || daysBetween(imp.shownAt, now) > 14) break;
+    exposureWindow++;
+    const c = byKey.get(imp.ideaKey) ?? candidateByKey(imp.ideaKey);
+    for (const g of c ? gameGroups(c.gameNames, facts) : []) recentGroups.set(g, (recentGroups.get(g) ?? 0) + 1);
+  }
   for (const imp of ctx.impressions) {
     const d = daysBetween(imp.shownAt, now);
     if (d > 14) continue;
@@ -647,7 +831,7 @@ export function generateIdeas(controls: GeneratorControls, ctx: CreatorContext, 
     arr.push(d);
     recentKeys.set(imp.ideaKey, arr);
     if (d > 3) continue;
-    const c = candidateByKey(imp.ideaKey);
+    const c = byKey.get(imp.ideaKey) ?? candidateByKey(imp.ideaKey);
     const sk = c?.seed.key ?? imp.ideaKey.split(":")[0] ?? imp.ideaKey;
     recentSeeds.set(sk, (recentSeeds.get(sk) ?? 0) + 1);
     if (c) {
@@ -678,11 +862,15 @@ export function generateIdeas(controls: GeneratorControls, ctx: CreatorContext, 
       enjoy += 2;
       enjoyEvidence++;
     }
+    // Favourite games count, but mostly as "more like these": the boost spreads to their genres.
     const favGame = gameCanon.some((n) => ctx.favoriteGames.has(n));
     if (favGame && mainGame) {
-      add(2.5, `${mainGame} is one of your favorite games`);
+      add(1.2, `${mainGame} is one of your favorite games`);
       enjoy += 2;
       enjoyEvidence++;
+    } else if (mainGame) {
+      const like = c.subjects.filter((x) => favoriteGenres.has(x));
+      if (like.length) add(0.8, `Similar to games you like: ${like.slice(0, 2).map(subjectLabel).join(", ")}`);
     }
     const tired = c.subjects.filter((x) => ctx.tiredSubjects.has(x));
     if (tired.length) {
@@ -719,8 +907,17 @@ export function generateIdeas(controls: GeneratorControls, ctx: CreatorContext, 
       enjoyEvidence++;
     }
 
-    if (c.hand && c.gameNames.length) add(1, c.gameNames.length > 1 ? "Written specifically for these games" : c.catalog[0]?.generic ? "Has a hand-written plan" : `Written specifically for ${mainGame}`);
-    if (s.anyGame) factors.push({ text: `A general format: no notes on ${mainGame} yet`, effect: "note" });
+    if (c.hand && c.gameNames.length) add(0.5, c.gameNames.length > 1 ? "Written specifically for these games" : c.catalog[0]?.generic ? "Has a hand-written plan" : `Written specifically for ${mainGame}`);
+    if (c.general && mainGame) factors.push({ text: `A general format: nothing specific is claimed about ${mainGame}`, effect: "note" });
+    // Destination fit.
+    if (destination !== "youtube" && c.live === "great") add(1.5, c.reason === "casual-live" ? "Just stream it: no premise needed" : "Works well live");
+    if (destination === "both" && c.video && c.reason) add(0.5, "Could also become a YouTube video later");
+    // No single studio or series takes over: recent exposure pushes it back.
+    const over = c.groups.map((g) => [g, recentGroups.get(g) ?? 0] as const).filter(([, n]) => n >= 3);
+    if (over.length && !requests.some((r) => matchesRequest(c, r))) {
+      const [g, n] = over.sort((a, b) => b[1] - a[1])[0]!;
+      add(-Math.min(6, 1.5 * (n - 2)), `${g.replace(/^(dev|series):/, "")} came up ${n} times recently`);
+    }
     if (c.videoType === "revisit" && mainGame && wasPlayed(c)) {
       const h = playedHours(c);
       add(1.5, h && h >= 1 ? `You've played ${mainGame} (${Math.round(h)} h in your library)` : `You've played ${mainGame} before`);
@@ -835,6 +1032,12 @@ export function generateIdeas(controls: GeneratorControls, ctx: CreatorContext, 
   const usedTypes = new Map<string, number>();
   const usedPrimary = new Map<string, number>();
   const typeCap = count <= 3 ? 1 : count <= 6 ? 2 : Infinity;
+  // Distinct concepts first: general formats and Casual Live fill at most a third of a batch.
+  const generalCap = Math.ceil(count / 3);
+  const casualCap = controls.streamMode === "casual" ? Infinity : Math.ceil(count / 3);
+  let generalPicks = 0;
+  let casualPicks = 0;
+  const usedGroups = new Set<string>();
   const remaining = [...scored];
   const wantNovelty = count >= 3 && !opts.likeThis && !controls.interest && mode !== "random" && requests.length === 0;
   // Feedback steers, it doesn't take over: at most a third of a batch may be won by learned likes.
@@ -843,6 +1046,8 @@ export function generateIdeas(controls: GeneratorControls, ctx: CreatorContext, 
 
   const fits = (r: Scored, sameGameOk = false, anyType = false) => {
     if (usedSeeds.has(r.c.seed.key)) return false;
+    if (!sameGameOk && r.c.groups.some((g) => usedGroups.has(g))) return false;
+    if (r.c.reason === "casual-live" ? casualPicks >= casualCap : r.c.general && !sameGameOk && generalPicks >= generalCap) return false;
     if (!sameGameOk && r.c.gameNames.some((g) => !findCatalogGame(g)?.generic && usedGames.has(canon(g)))) return false;
     if (!anyType && (usedTypes.get(r.c.videoType) ?? 0) >= typeCap) return false;
     return true;
@@ -879,6 +1084,9 @@ export function generateIdeas(controls: GeneratorControls, ctx: CreatorContext, 
     usedTypes.set(pick.c.videoType, (usedTypes.get(pick.c.videoType) ?? 0) + 1);
     const primary = pick.c.subjects[0] ?? "";
     usedPrimary.set(primary, (usedPrimary.get(primary) ?? 0) + 1);
+    for (const g of pick.c.groups) usedGroups.add(g);
+    if (pick.c.reason === "casual-live") casualPicks++;
+    else if (pick.c.general) generalPicks++;
   };
 
   // Games you asked for come first: several different videos about each one,
@@ -895,7 +1103,10 @@ export function generateIdeas(controls: GeneratorControls, ctx: CreatorContext, 
         // or a tour of several games, only if that's all there is.
         const solo = (x: Scored) => matchesRequest(x.c, r) && x.c.gameNames.length === 1;
         const any = (x: Scored) => matchesRequest(x.c, r);
-        const pick = pickFor(null, false, solo) ?? pickFor(null, false, solo, true) ?? pickFor(null, false, any) ?? pickFor(null, false, any, true);
+        // Hand-written ideas before general formats.
+        const specific = (x: Scored) => solo(x) && !x.c.general;
+        const pick =
+          pickFor(null, false, specific) ?? pickFor(null, false, specific, true) ?? pickFor(null, false, solo) ?? pickFor(null, false, solo, true) ?? pickFor(null, false, any) ?? pickFor(null, false, any, true);
         if (!pick) {
           open.delete(i);
           ranOut.add(i);
@@ -941,6 +1152,7 @@ export function generateIdeas(controls: GeneratorControls, ctx: CreatorContext, 
     const s = p.c.seed;
     const reasons = p.factors.filter((f) => f.effect === "plus").map((f) => f.text);
     const m = materialize(p.c, reasons, mode === "tonight", p.access);
+    m.details.destination = destination;
     const feas: Level = s.effort === "tiny" || s.effort === "small" ? "high" : s.effort === "medium" ? "medium" : "low";
     const enjoyment: Level = p.enjoymentSignal === null ? "unknown" : p.enjoymentSignal > 1 ? "high" : p.enjoymentSignal > -0.5 ? "medium" : "low";
     return {
