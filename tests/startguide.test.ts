@@ -41,3 +41,11 @@ test("your own 'viewers need to know' lines are kept, and the plan is stored on 
   await repo.updateProject(db, p.id, { details: { startPlan: { ...EMPTY_START_PLAN, save: "existing", choice: "mid-save" } } });
   assert.equal((await repo.getProject(db, p.id))?.details.startPlan.choice, "mid-save");
 });
+
+test("a video made from a stream starts at the moment, with the stream as footage", () => {
+  const a = startAdvice(EMPTY_START_PLAN, { fromStream: true, game: "Lethal Company" });
+  assert.equal(a.suggested, "mid-save");
+  assert.match(a.headline, /it's the stream/);
+  assert.match(a.headline, /Nobody needs the hours of stream before it/);
+  assert.equal(startAdvice({ ...EMPTY_START_PLAN, context: "lots" }, { fromStream: true }).suggested, "recap");
+});

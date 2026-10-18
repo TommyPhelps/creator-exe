@@ -127,6 +127,7 @@ export function Projects() {
       <span className="next">&gt; {data ? suggestedNextAction(p, data.tasks) : p.nextAction}</span>
       <span className="row small">
         <Chip title="Detailed stage">{p.archived ? "Archived" : stageLabel(p.stage)}</Chip>
+        {p.destination !== "youtube" ? <Chip kind="accent" title="Where this is going">{p.destination === "twitch" ? "Twitch" : "YT + Twitch"}</Chip> : null}
         <Chip>{COMPLEXITY.find((c) => c.id === p.complexity)?.label}</Chip>
         {p.priority > 0 ? <Chip kind="accent">P{p.priority}</Chip> : null}
         {p.details.customStatus ? <Chip kind="warn">{p.details.customStatus}</Chip> : null}

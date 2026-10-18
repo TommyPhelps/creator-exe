@@ -51,7 +51,7 @@ that interface, so the same code runs inside the Windows app (`tauri.ts`) and in
 a real SQLite database (`tests/helpers/sqliteDb.ts`). A plain browser cannot open the app's
 database and gets a clear boot error instead of fake data.
 
-## Data model (schema v4)
+## Data model (schema v5)
 
 | Table | Holds |
 |---|---|
@@ -70,7 +70,7 @@ database and gets a clear boot error instead of fake data.
 
 v3 (v0.1.2) is a repair step, not new data: two different "v2" layouts shipped (v0.1.1's, and the 0.2.0 Phase 2 preview's `video_forensics` table). v3 adds whatever either is missing, with `CREATE TABLE IF NOT EXISTS` and column checks, so every database ends up with both and nothing is dropped.
 
-v4 (v0.1.2) adds `ideas.notes` (your notes on an idea, carried into its project). Recording-sheet fields live in the existing `projects.details` JSON, so older projects open unchanged with empty sheet fields. Phase 2 features will use v5+.
+v4 (v0.1.2) adds `ideas.notes` (your notes on an idea, carried into its project). Recording-sheet fields live in the existing `projects.details` JSON, so older projects open unchanged with empty sheet fields. v5 (v0.1.3) adds `projects.destination` (youtube / twitch / both; existing rows become youtube), `projects.source_project_id` (a YouTube project made from a stream), `stream_sessions` (mode, title, category, go-live note, goal, talking points, start/end, VOD link, notes), `moments` (VOD-style time + note, per project and session) and `game_meta` (facts per game per source: Steam now, IGDB in v0.1.4). Phase 2 features will use v6+.
 
 v2 also added `profile_items.scope` (channel / personal / watching), `videos.user_subjects` (your own topics) and `idea_feedback.detail` (what a reaction was about).
 
@@ -93,6 +93,14 @@ v0.1.2 additions:
 - Played games (library playtime of 2+ hours, rating, favourite or status) never get first-playthrough ideas; `when: "played"` ideas need that evidence.
 - At most a third of a batch can be won by learned likes; after that, candidates are compared without their learned boost.
 - Free mods and modpacks (`requires` in the catalog) are only "free" when you own the game they run on.
+
+v0.1.3 additions:
+- Every YouTube idea carries a reason to exist (`reason`); Let's Play-style formats are retired and a test lints titles and premises.
+- `destination` (YouTube / Twitch / Both) filters and scores by how well a kind of video works live; Casual Live is a premise-free stream format offered on request or for at most a third of a batch.
+- Variety: developer/series exposure over the last 45 suggestions, no two ideas from one studio/series per batch, favourites boost similar genres; explicit requests bypass all of it.
+- `libraryVariety.ts`: ideas for co-op/party, sims, driving, sandbox, puzzle and strategy games, and general formats keyed to genre for library games without notes (labelled general, at most a third of a batch).
+- `games/meta.ts` merges outside facts (Steam appdetails today) into `GameFacts`; IGDB can fill the same shape.
+- `streams.ts` (sessions, moments, linked YouTube project) and `startGuide.ts` ("Where do I start?" rules) are pure domain code with tests; the UI is `StreamPanel.tsx` and `StartGuide.tsx` on the recording sheet.
 
 ## Evidence model
 

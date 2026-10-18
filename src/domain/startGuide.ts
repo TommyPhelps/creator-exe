@@ -45,7 +45,7 @@ export const CHOICE_LABEL: Record<StartChoice, string> = {
   "new-run": "Start a new game",
 };
 
-export function startAdvice(plan: StartPlan, hints: { startingSituation?: string; startFrom?: "new" | "save" | "anywhere"; hoursPlayed?: number | null; game?: string } = {}): StartAdvice {
+export function startAdvice(plan: StartPlan, hints: { startingSituation?: string; startFrom?: "new" | "save" | "anywhere"; hoursPlayed?: number | null; game?: string; fromStream?: boolean } = {}): StartAdvice {
   const game = hints.game?.split(" + ")[0] || "the game";
   const hours = hints.hoursPlayed && hints.hoursPlayed >= 1 ? Math.round(hints.hoursPlayed) : null;
   const notes: string[] = [];
@@ -53,7 +53,10 @@ export function startAdvice(plan: StartPlan, hints: { startingSituation?: string
   let suggested: StartChoice | null;
 
   const about = plan.about ?? (hints.startFrom === "new" ? "beginning" : null);
-  if (about === "beginning") {
+  if (hints.fromStream && about !== "beginning") {
+    headline = "Your footage already exists: it's the stream. Start at the moment this video is about, and set it up in a sentence or two. Nobody needs the hours of stream before it.";
+    suggested = plan.context === "lots" || plan.dependsOnChoices ? "recap" : "mid-save";
+  } else if (about === "beginning") {
     headline = "This idea is about how the game begins, so the beginning is the content. Start a new game and record from the first screen.";
     suggested = "new-run";
   } else if (plan.save === "fresh") {

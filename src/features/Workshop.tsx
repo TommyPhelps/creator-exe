@@ -8,6 +8,7 @@ import {
   listPackages,
   listProjectEvents,
   listResearch,
+  listSessions,
   listTasks,
   listThumbnails,
   listTitles,
@@ -19,7 +20,8 @@ import {
   updateProject,
   type ProjectPatch,
 } from "../db/repos.ts";
-import { STAGES, type Complexity, type Project, type ResearchItem, type TaskList } from "../domain/types.ts";
+import { DESTINATIONS, STAGES, type Complexity, type Project, type ResearchItem, type TaskList } from "../domain/types.ts";
+import { planStream } from "../domain/streams.ts";
 import { PHASES, phaseOf, rescueOptions, stageForPhase, stageLabel, suggestedNextAction } from "../domain/projects.ts";
 import { formatDate, relativeTime } from "../lib/util.ts";
 import { Button, Chip, Dialog, Empty, Note, PageHead, Segmented, Select, Tabs, TextInput, Win } from "../ui/kit.tsx";
@@ -33,6 +35,7 @@ const LISTS: { id: TaskList; label: string; hint: string }[] = [
   { id: "prep", label: "Preparation", hint: "What to get ready before recording." },
   { id: "recording", label: "Recording checklist", hint: "Shots and takes to get." },
   { id: "upload", label: "Upload checklist", hint: "Anything specific to this upload (the standard list is in Packaging Lab)." },
+  { id: "stream", label: "Before going live", hint: "Stream setup: OBS, audio, title. Shown on the recording sheet for streams." },
 ];
 
 function Checklists({ projectId }: { projectId: string }) {
@@ -397,6 +400,23 @@ export function Workshop({ projectId, tab: initialTab }: { projectId: string; ta
           label="Step"
         />
         <Select value={p.stage} options={STAGES} onChange={(v) => save({ stage: v, archived: v === "archived" })} className="" />
+        <span className="label">For</span>
+        <Segmented
+          value={p.destination}
+          options={DESTINATIONS}
+          onChange={(v) => {
+            if (!v || v === p.destination) return;
+            void act(async () => {
+              await updateProject(db, p.id, { destination: v });
+              // Moving to Twitch: plan a first session (Casual Live) if there isn't one.
+              if (v !== "youtube" && !(await listSessions(db, p.id)).length) {
+                const fresh = await getProject(db, p.id);
+                if (fresh) await planStream(db, fresh, "casual");
+              }
+            });
+          }}
+          label="Where this is going"
+        />
         <span className="label">Size</span>
         <Segmented<Complexity>
           value={p.complexity}

@@ -101,3 +101,37 @@ Run these on the installed app. Each maps to a success workflow in the brief.
 2. On a project, the Step buttons move it between the four steps; the stage dropdown still sets the exact stage.
 3. Control Room shows the current project's step and a Continue button first. Tonight lists projects you could pick up instead.
 4. Pass if a notification never blocks a button you need: they disappear on their own, and clicking one dismisses it.
+
+## v0.1.3
+
+**Your data survives**
+1. Install 0.1.3 over 0.1.2. Pass if the boot screen reports schema v5, and every project, idea, the game library and Creator Memory are still there. Every existing project is a YouTube project.
+2. Make a backup and restore it (File → Restore from backup). Pass if streams and moments come back too.
+
+**No Let's Plays**
+1. Idea Machine, YouTube, Generate several times. Pass if no idea is "Let's Play", "Part 1", a full playthrough, "my first hour/ten hours", "X in 2026", "Why X is underrated" or "still worth playing". Each card says why the video exists (a discovery, an experiment, a situation...).
+2. Pass if a mix shows up: experiments, situations, mechanics, challenges, co-op/party games, sims, driving, puzzle, strategy, mods, the odd bit of research. Not a wall of retrospectives.
+
+**Variety**
+1. Generate ten batches without typing a game. Pass if Bethesda, FromSoftware and CD Projekt games appear sometimes but don't dominate, and the VARIETY line under the batch shows many games, genres and developers.
+2. Type **Skyrim** in Build around games. Pass if you get Skyrim ideas anyway.
+3. Idea Machine → **Games**. Pass if your REWIND library and the catalog are listed together, filters work (genre, era, never played, free), and **What could I make?** gives a batch about that game. With your library imported, press **Get genres and developers from Steam** and check a few rows fill in.
+4. Pass if a game from your library that the app has no notes on shows up as a **general format**, labelled as such, claiming nothing specific about the game.
+
+**Multiplayer**
+1. More controls → Playing: **With friends**. Pass if co-op, party and weird online games appear, and nothing competitive unless you ask for it.
+
+**YouTube / Twitch / Both**
+1. Switch **Making** to Twitch. Pass if the batch is things that work live (no Shorts or analyses), the cards say **Plan stream**, and there's a Concept Stream / Casual Live choice. Casual Live gives "just stream it" with no premise and no series.
+2. Plan a stream. Pass if the recording sheet shows a **Stream** section: mode, title (with a 140 counter and starting points you can click), category, go-live note (140 counter), what you want from it, talking points, and a **Before going live** checklist.
+3. Press **I'm live: start the log**, then **Mark moment**, type a VOD time and a note, then **Stream ended**. Pass if the moments list shows both with times.
+4. Press **Make a YouTube video from this stream**. Pass if a separate YouTube project opens, says where it came from, and has the stream's notes and moments under My notes. The stream project stays as it was.
+5. Pass if nothing ever suggests uploading a raw stream as a video, and nothing touches Twitch or OBS.
+
+**Where do I start?**
+1. On a YouTube project, open **Where do I start?** Answer: I have a save near it / Something later on / A little. Pass if it says you don't need to show what came before, lists what viewers actually need, and suggests a few seconds of establishing footage.
+2. Pass if "How the game begins" suggests a new game, "Quite a lot" of context suggests a short recap, and your choice (Start in the middle / Short recap / Start a new game) is saved.
+3. On the YouTube project made from a stream, pass if it says your footage is the stream and to start at the moment.
+
+**Nothing regressed**
+1. The v0.1.2 checks still pass: recording sheet, starting an idea twice reopens it, playtime-aware ideas, feedback, the four steps, Tamster's description.

@@ -10,6 +10,8 @@ import { subjectLabel } from "../domain/ideas/subjects.ts";
 import { videoTypeLabel } from "../domain/ideas/videoTypes.ts";
 import { findCatalogGame } from "../domain/games/catalog.ts";
 import { Button, Chip, TextArea, TextInput } from "../ui/kit.tsx";
+import { StartGuide } from "./StartGuide.tsx";
+import { FromStream, StreamPanel, StreamSide } from "./StreamPanel.tsx";
 
 /** The pre-v0.1.2 project fields, kept in full under "More notes". */
 export const MORE_NOTES: { key: keyof ProjectDetails; label: string; hint: string; rows?: number }[] = [
@@ -27,7 +29,7 @@ export const MORE_NOTES: { key: keyof ProjectDetails; label: string; hint: strin
   { key: "notes", label: "Notes", hint: "Anything else.", rows: 5 },
 ];
 
-function StringList(p: { items: string[]; onChange: (v: string[]) => void; placeholder: string; label: string }) {
+export function StringList(p: { items: string[]; onChange: (v: string[]) => void; placeholder: string; label: string }) {
   const [draft, setDraft] = useState("");
   const add = () => {
     if (!draft.trim()) return;
@@ -143,7 +145,7 @@ function GameField({ onSet }: { onSet: (v: string) => void }) {
   return <input className="input grow" value={v} placeholder="Which game is this about? (optional, press Enter)" onChange={(e) => setV(e.target.value)} onBlur={commit} onKeyDown={(e) => e.key === "Enter" && commit()} aria-label="Game" />;
 }
 
-function Section(p: { title: string; children: ReactNode; hint?: string; className?: string }) {
+export function Section(p: { title: string; children: ReactNode; hint?: string; className?: string }) {
   return (
     <section className={`sheet-section ${p.className ?? ""}`}>
       <h4>{p.title}</h4>
@@ -175,7 +177,10 @@ export function RecordingSheet({ project: p, next }: { project: Project; next: s
           {!d.game ? <GameField onSet={(game) => save({ details: { game } })} /> : null}
         </div>
 
-        <Section title="The hook">
+        {p.sourceProjectId ? <FromStream sourceId={p.sourceProjectId} /> : null}
+        {p.destination !== "youtube" ? <StreamPanel project={p} /> : null}
+
+        <Section title={p.destination === "twitch" ? "The idea (optional for Casual Live)" : "The hook"}>
           <TextArea className="hook" value={d.hook || p.premise} rows={2} placeholder="The situation that makes this video interesting, in a sentence." onCommit={(v) => save({ details: { hook: v } })} />
           {d.watchAppeal ? (
             <p className="watch">
@@ -191,6 +196,8 @@ export function RecordingSheet({ project: p, next }: { project: Project; next: s
         <Section title="Where it starts" hint="A natural place to start recording. Not an intro to read out.">
           <TextArea value={d.startingSituation} rows={2} placeholder="e.g. start at the character creator and answer honestly" onCommit={(v) => save({ details: { startingSituation: v } })} />
         </Section>
+
+        {p.destination !== "twitch" ? <StartGuide project={p} /> : null}
 
         <Section title="My notes">
           <TextArea value={d.myNotes} rows={5} placeholder="Anything: bits you want to try, things you noticed, what you'd do differently." onCommit={(v) => save({ details: { myNotes: v } })} />
@@ -211,9 +218,13 @@ export function RecordingSheet({ project: p, next }: { project: Project; next: s
           </Section>
         ) : null}
 
-        <Section title="Moments to capture">
-          <Moments projectId={p.id} />
-        </Section>
+        {p.destination !== "youtube" ? <StreamSide project={p} /> : null}
+
+        {p.destination !== "twitch" ? (
+          <Section title="Moments to capture">
+            <Moments projectId={p.id} />
+          </Section>
+        ) : null}
 
         <Section title="You need">
           <StringList items={d.needs} label="You need" placeholder="Add something you need" onChange={(needs) => save({ details: { needs } })} />
@@ -227,7 +238,7 @@ export function RecordingSheet({ project: p, next }: { project: Project; next: s
           <StringList items={d.visualBeats} label="Visual beats" placeholder="e.g. the moment the bridge collapses" onChange={(visualBeats) => save({ details: { visualBeats } })} />
         </details>
 
-        {d.smallestVideo || d.ifItGoesWell ? (
+        {p.destination !== "twitch" && (d.smallestVideo || d.ifItGoesWell) ? (
           <Section title="Size it">
             <dl className="kv">
               {d.smallestVideo ? (

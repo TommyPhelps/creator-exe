@@ -167,6 +167,16 @@ export function FeedbackMenu({ g, onReact }: { g: GeneratedIdea; onReact: (r: Re
   );
 }
 
+/** How long an idea takes to capture: some are twenty minutes, some develop over days. */
+const CAPTURE_LABEL: Record<string, string> = {
+  "30m": "Capture: ~20-30 min",
+  "1h": "Capture: about an hour",
+  afternoon: "Capture: one session",
+  day: "Capture: a full day",
+  weekend: "Capture: a few sessions",
+  long: "Develops over days or weeks",
+};
+
 export function IdeaCard(props: {
   idea: GeneratedIdea;
   compact?: boolean;
@@ -236,7 +246,7 @@ export function IdeaCard(props: {
 
       <div className="row chips">
         <Chip title="Estimated production effort">{EFFORT_LABEL[d.effort]} effort</Chip>
-        <Chip>{TIME_LABEL[d.time]}</Chip>
+        <Chip title={`Roughly how long it takes to capture (${TIME_LABEL[d.time].toLowerCase()}), not how long the video is`}>{CAPTURE_LABEL[d.time]}</Chip>
         <Chip>{d.recording.map((r) => REC_LABEL[r]).join(" + ")}</Chip>
         {d.format === "short" ? <Chip>Short</Chip> : d.format === "either" ? <Chip>Long or Short</Chip> : null}
         {d.series ? <Chip>Series potential</Chip> : null}

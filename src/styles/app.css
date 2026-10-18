@@ -470,3 +470,25 @@ ul.plain { margin: 0; padding-left: 18px; }
 .games-table td { padding: 4px 8px; vertical-align: middle; }
 .games-table tr:hover td { background: var(--face-2); }
 .variety-line { font-family: var(--font-mono, monospace); color: var(--led); letter-spacing: .3px; margin: 2px 0; }
+
+/* v0.1.3: streams and "Where do I start?" */
+.kv-grid { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 6px 10px; align-items: start; }
+.kv-grid > .label { padding-top: 5px; }
+.chip.clickable { cursor: pointer; border: 0; font: inherit; font-size: 12px; color: var(--text); }
+.chip.clickable:hover { background: var(--select); color: var(--select-text); }
+.linklike { border: 0; background: none; padding: 0 6px 0 0; color: var(--focus); text-decoration: underline; cursor: pointer; font: inherit; }
+.err-text { color: var(--err); }
+.input.over { box-shadow: var(--sunken), inset 0 0 0 1px var(--err); }
+.stamp { width: 92px; flex: 0 0 92px; }
+.stream-session { padding-top: 4px; }
+.stream-clock .lcd-title { font-size: 30px; letter-spacing: 2px; }
+.stream-clock.live .lcd-label { color: var(--err); filter: brightness(1.6); }
+.stream-to-video { padding-top: 6px; border-top: 1px dashed var(--hi-2); }
+.start-guide > summary { display: flex; align-items: center; gap: 10px; cursor: pointer; }
+.start-guide > summary h4 { margin: 0; }
+.start-q { display: grid; grid-template-columns: 130px minmax(0, 1fr); gap: 6px 10px; align-items: center; margin: 8px 0; }
+.start-advice { margin: 8px 0; }
+.start-advice .lcd-line { white-space: normal; line-height: 1.45; font-size: 14px; }
+.start-advice.quiet { opacity: .8; }
+.start-cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+@media (max-width: 1300px) { .start-cols { grid-template-columns: 1fr; } }
