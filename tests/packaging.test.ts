@@ -23,6 +23,8 @@ const project: Project = {
   createdAt: now,
   updatedAt: now,
   openedAt: null,
+  destination: "youtube",
+  sourceProjectId: null,
 };
 const source = (patch: Partial<ResearchItem>): ResearchItem => ({
   id: "r",

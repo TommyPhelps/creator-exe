@@ -283,6 +283,47 @@ export interface ProjectDetails {
   source: { ideaId: string; ideaKey: string | null; seedKey: string | null; startedAt: string } | null;
 }
 
+/** Where a project is headed. A stream and a later upload are separate outcomes. */
+export type Destination = "youtube" | "twitch" | "both";
+export const DESTINATIONS: { id: Destination; label: string }[] = [
+  { id: "youtube", label: "YouTube" },
+  { id: "twitch", label: "Twitch" },
+  { id: "both", label: "Both" },
+];
+
+/** Casual Live: just stream, no premise needed. Concept Stream: there's a particular thing to explore. */
+export type StreamMode = "casual" | "concept";
+
+export interface StreamSession {
+  id: string;
+  projectId: string;
+  mode: StreamMode;
+  title: string;
+  category: string;
+  goLiveNote: string;
+  goal: string;
+  talkingPoints: string;
+  startedAt: string | null;
+  endedAt: string | null;
+  vodUrl: string;
+  notes: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Something worth revisiting: typed by you, never picked automatically. */
+export interface Moment {
+  id: string;
+  projectId: string;
+  sessionId: string | null;
+  /** A VOD timestamp like 1:23:45, or anything you type. */
+  atText: string;
+  /** Seconds since the session started, when marked with the button. */
+  offsetSeconds: number | null;
+  note: string;
+  createdAt: string;
+}
+
 export interface Project {
   id: string;
   title: string;
@@ -300,9 +341,12 @@ export interface Project {
   createdAt: string;
   updatedAt: string;
   openedAt: string | null;
+  destination: Destination;
+  /** Set on a YouTube project made from a stream: the stream project it came from. */
+  sourceProjectId: string | null;
 }
 
-export type TaskList = "prep" | "recording" | "upload";
+export type TaskList = "prep" | "recording" | "upload" | "stream";
 
 export interface ProjectTask {
   id: string;

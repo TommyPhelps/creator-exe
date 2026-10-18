@@ -1,6 +1,6 @@
 [package]
 name = "creator-exe"
-version = "0.1.2"
+version = "0.1.3"
 description = "CREATOR.EXE - personal YouTube creative workstation"
 authors = ["Tommy Phelps"]
 edition = "2021"

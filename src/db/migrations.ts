@@ -314,7 +314,84 @@ export const MIGRATIONS: Migration[] = [
       return ["added ideas.notes"];
     },
   },
+  {
+    version: 5,
+    name: "YouTube and Twitch: destinations, stream sessions, moments, game metadata",
+    statements: [],
+    run: addStreamsAndMeta,
+  },
 ];
+
+/**
+ * v5 (v0.1.3). Additive and existence-checked like v3/v4: every existing
+ * project becomes a YouTube project (what it already was), nothing is
+ * rewritten, and running it twice does nothing.
+ */
+export async function addStreamsAndMeta(db: Db): Promise<string[]> {
+  const out: string[] = [];
+  const projectCols = await columnNames(db, "projects");
+  if (!projectCols.has("destination")) {
+    await db.execute("ALTER TABLE projects ADD COLUMN destination TEXT NOT NULL DEFAULT 'youtube'");
+    out.push("added projects.destination");
+  }
+  if (!projectCols.has("source_project_id")) {
+    await db.execute("ALTER TABLE projects ADD COLUMN source_project_id TEXT");
+    out.push("added projects.source_project_id");
+  }
+  const have = await tableNames(db);
+  if (!have.has("stream_sessions")) {
+    await db.execute(`CREATE TABLE IF NOT EXISTS stream_sessions (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      mode TEXT NOT NULL DEFAULT 'casual',
+      title TEXT NOT NULL DEFAULT '',
+      category TEXT NOT NULL DEFAULT '',
+      go_live_note TEXT NOT NULL DEFAULT '',
+      goal TEXT NOT NULL DEFAULT '',
+      talking_points TEXT NOT NULL DEFAULT '',
+      started_at TEXT,
+      ended_at TEXT,
+      vod_url TEXT NOT NULL DEFAULT '',
+      notes TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )`);
+    await db.execute("CREATE INDEX IF NOT EXISTS idx_sessions_project ON stream_sessions(project_id)");
+    out.push("added table stream_sessions");
+  }
+  if (!have.has("moments")) {
+    await db.execute(`CREATE TABLE IF NOT EXISTS moments (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      session_id TEXT REFERENCES stream_sessions(id) ON DELETE SET NULL,
+      at_text TEXT NOT NULL DEFAULT '',
+      offset_seconds INTEGER,
+      note TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL
+    )`);
+    await db.execute("CREATE INDEX IF NOT EXISTS idx_moments_project ON moments(project_id)");
+    out.push("added table moments");
+  }
+  if (!have.has("game_meta")) {
+    // One row per game per source (Steam now; IGDB from v0.1.4), with the date checked.
+    await db.execute(`CREATE TABLE IF NOT EXISTS game_meta (
+      canon TEXT NOT NULL,
+      source TEXT NOT NULL,
+      source_id TEXT NOT NULL DEFAULT '',
+      name TEXT NOT NULL DEFAULT '',
+      developers TEXT NOT NULL DEFAULT '[]',
+      publishers TEXT NOT NULL DEFAULT '[]',
+      genres TEXT NOT NULL DEFAULT '[]',
+      tags TEXT NOT NULL DEFAULT '[]',
+      modes TEXT NOT NULL DEFAULT '[]',
+      release_year INTEGER,
+      checked_at TEXT NOT NULL,
+      PRIMARY KEY (canon, source)
+    )`);
+    out.push("added table game_meta");
+  }
+  return out;
+}
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1]?.version ?? 0;
 
@@ -338,6 +415,9 @@ export const BACKUP_TABLES = [
   "games",
   "game_info",
   "video_forensics",
+  "stream_sessions",
+  "moments",
+  "game_meta",
 ] as const;
 
 export type BackupTable = (typeof BACKUP_TABLES)[number];

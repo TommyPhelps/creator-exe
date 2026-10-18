@@ -6,6 +6,7 @@ import type { LibraryGame } from "../domain/games/library.ts";
 import { newId, nowIso, parseJson } from "../lib/util.ts";
 import type {
   Complexity,
+  Destination,
   Durability,
   EvidenceSource,
   FeedbackDetail,
@@ -15,6 +16,7 @@ import type {
   IdeaFeedback,
   IdeaOrigin,
   IdeaStatus,
+  Moment,
   PackageContent,
   ProfileItem,
   ProfileKind,
@@ -26,6 +28,8 @@ import type {
   Reaction,
   ResearchItem,
   Stage,
+  StreamMode,
+  StreamSession,
   TaskList,
   ThumbnailRecord,
   TitleCandidate,
@@ -427,6 +431,8 @@ const toProject = (r: Row): Project => ({
   createdAt: str(r.created_at),
   updatedAt: str(r.updated_at),
   openedAt: strOrNull(r.opened_at),
+  destination: (["youtube", "twitch", "both"].includes(str(r.destination)) ? str(r.destination) : "youtube") as Destination,
+  sourceProjectId: strOrNull(r.source_project_id),
 });
 
 export async function listProjects(db: Db, includeArchived = false): Promise<Project[]> {
@@ -452,6 +458,8 @@ export interface NewProjectInput {
   details?: Partial<ProjectDetails>;
   tasks?: { list: TaskList; label: string }[];
   stage?: Stage;
+  destination?: Destination;
+  sourceProjectId?: string | null;
 }
 
 export async function createProject(db: Db, input: NewProjectInput): Promise<Project> {
@@ -460,8 +468,8 @@ export async function createProject(db: Db, input: NewProjectInput): Promise<Pro
   const details: ProjectDetails = { ...EMPTY_DETAILS, ...(input.details ?? {}) };
   const statements = [
     {
-      sql: `INSERT INTO projects (id, title, premise, why, stage, complexity, priority, next_action, folder_path, idea_id, subjects, details, archived, created_at, updated_at, opened_at)
-            VALUES (?, ?, ?, ?, ?, ?, 0, ?, NULL, ?, ?, ?, 0, ?, ?, ?)`,
+      sql: `INSERT INTO projects (id, title, premise, why, stage, complexity, priority, next_action, folder_path, idea_id, subjects, details, archived, created_at, updated_at, opened_at, destination, source_project_id)
+            VALUES (?, ?, ?, ?, ?, ?, 0, ?, NULL, ?, ?, ?, 0, ?, ?, ?, ?, ?)`,
       params: [
         id,
         input.title.trim() || "Untitled video",
@@ -476,6 +484,8 @@ export async function createProject(db: Db, input: NewProjectInput): Promise<Pro
         t,
         t,
         t,
+        input.destination ?? "youtube",
+        input.sourceProjectId ?? null,
       ],
     },
     {
@@ -496,7 +506,7 @@ export async function createProject(db: Db, input: NewProjectInput): Promise<Pro
   return p;
 }
 
-export type ProjectPatch = Partial<Pick<Project, "title" | "premise" | "why" | "stage" | "complexity" | "priority" | "nextAction" | "folderPath" | "subjects" | "archived">> & {
+export type ProjectPatch = Partial<Pick<Project, "title" | "premise" | "why" | "stage" | "complexity" | "priority" | "nextAction" | "folderPath" | "subjects" | "archived" | "destination">> & {
   details?: Partial<ProjectDetails>;
 };
 
@@ -508,8 +518,8 @@ export async function updateProject(db: Db, id: string, patch: ProjectPatch): Pr
   const statements = [
     {
       sql: `UPDATE projects SET title = ?, premise = ?, why = ?, stage = ?, complexity = ?, priority = ?, next_action = ?, folder_path = ?,
-            subjects = ?, details = ?, archived = ?, updated_at = ? WHERE id = ?`,
-      params: [n.title, n.premise, n.why, n.stage, n.complexity, n.priority, n.nextAction, n.folderPath, JSON.stringify(n.subjects), JSON.stringify(n.details), n.archived ? 1 : 0, t, id],
+            subjects = ?, details = ?, archived = ?, destination = ?, updated_at = ? WHERE id = ?`,
+      params: [n.title, n.premise, n.why, n.stage, n.complexity, n.priority, n.nextAction, n.folderPath, JSON.stringify(n.subjects), JSON.stringify(n.details), n.archived ? 1 : 0, n.destination, t, id],
     },
   ];
   if (patch.stage && patch.stage !== cur.stage) {
@@ -867,4 +877,143 @@ export async function clearGameInfo(db: Db): Promise<void> {
 export async function getGame(db: Db, canonTitle: string): Promise<LibraryGame | null> {
   const rows = await db.select<Row>("SELECT * FROM games WHERE canon = ?", [canonTitle]);
   return rows[0] ? toGame(rows[0]) : null;
+}
+
+// ---------------------------------------------------------------- streams (v5)
+
+const toSession = (r: Row): StreamSession => ({
+  id: str(r.id),
+  projectId: str(r.project_id),
+  mode: (str(r.mode) === "concept" ? "concept" : "casual") as StreamMode,
+  title: str(r.title),
+  category: str(r.category),
+  goLiveNote: str(r.go_live_note),
+  goal: str(r.goal),
+  talkingPoints: str(r.talking_points),
+  startedAt: strOrNull(r.started_at),
+  endedAt: strOrNull(r.ended_at),
+  vodUrl: str(r.vod_url),
+  notes: str(r.notes),
+  createdAt: str(r.created_at),
+  updatedAt: str(r.updated_at),
+});
+
+export async function listSessions(db: Db, projectId: string): Promise<StreamSession[]> {
+  return (await db.select<Row>("SELECT * FROM stream_sessions WHERE project_id = ? ORDER BY created_at ASC", [projectId])).map(toSession);
+}
+
+export async function createSession(db: Db, projectId: string, input: Partial<Omit<StreamSession, "id" | "projectId" | "createdAt" | "updatedAt">> = {}): Promise<StreamSession> {
+  const t = nowIso();
+  const id = newId();
+  await db.execute(
+    `INSERT INTO stream_sessions (id, project_id, mode, title, category, go_live_note, goal, talking_points, started_at, ended_at, vod_url, notes, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [id, projectId, input.mode ?? "casual", input.title ?? "", input.category ?? "", input.goLiveNote ?? "", input.goal ?? "", input.talkingPoints ?? "", input.startedAt ?? null, input.endedAt ?? null, input.vodUrl ?? "", input.notes ?? "", t, t],
+  );
+  return (await db.select<Row>("SELECT * FROM stream_sessions WHERE id = ?", [id])).map(toSession)[0]!;
+}
+
+export async function updateSession(db: Db, id: string, patch: Partial<Omit<StreamSession, "id" | "projectId" | "createdAt" | "updatedAt">>): Promise<StreamSession | null> {
+  const cur = (await db.select<Row>("SELECT * FROM stream_sessions WHERE id = ?", [id])).map(toSession)[0];
+  if (!cur) return null;
+  const n = { ...cur, ...patch };
+  await db.execute(
+    `UPDATE stream_sessions SET mode = ?, title = ?, category = ?, go_live_note = ?, goal = ?, talking_points = ?, started_at = ?, ended_at = ?, vod_url = ?, notes = ?, updated_at = ? WHERE id = ?`,
+    [n.mode, n.title, n.category, n.goLiveNote, n.goal, n.talkingPoints, n.startedAt, n.endedAt, n.vodUrl, n.notes, nowIso(), id],
+  );
+  return (await db.select<Row>("SELECT * FROM stream_sessions WHERE id = ?", [id])).map(toSession)[0] ?? null;
+}
+
+export async function deleteSession(db: Db, id: string): Promise<void> {
+  await db.execute("DELETE FROM stream_sessions WHERE id = ?", [id]);
+}
+
+const toMoment = (r: Row): Moment => ({
+  id: str(r.id),
+  projectId: str(r.project_id),
+  sessionId: strOrNull(r.session_id),
+  atText: str(r.at_text),
+  offsetSeconds: numOrNull(r.offset_seconds),
+  note: str(r.note),
+  createdAt: str(r.created_at),
+});
+
+export async function listMoments(db: Db, projectId: string): Promise<Moment[]> {
+  return (await db.select<Row>("SELECT * FROM moments WHERE project_id = ? ORDER BY COALESCE(offset_seconds, 0), created_at", [projectId])).map(toMoment);
+}
+
+export async function addMoment(db: Db, projectId: string, input: { sessionId?: string | null; atText?: string; offsetSeconds?: number | null; note?: string }): Promise<Moment> {
+  const id = newId();
+  await db.execute("INSERT INTO moments (id, project_id, session_id, at_text, offset_seconds, note, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)", [
+    id,
+    projectId,
+    input.sessionId ?? null,
+    input.atText ?? "",
+    input.offsetSeconds ?? null,
+    input.note ?? "",
+    nowIso(),
+  ]);
+  return (await db.select<Row>("SELECT * FROM moments WHERE id = ?", [id])).map(toMoment)[0]!;
+}
+
+export async function updateMoment(db: Db, id: string, patch: { atText?: string; note?: string }): Promise<void> {
+  const cur = (await db.select<Row>("SELECT * FROM moments WHERE id = ?", [id])).map(toMoment)[0];
+  if (!cur) return;
+  await db.execute("UPDATE moments SET at_text = ?, note = ? WHERE id = ?", [patch.atText ?? cur.atText, patch.note ?? cur.note, id]);
+}
+
+export async function deleteMoment(db: Db, id: string): Promise<void> {
+  await db.execute("DELETE FROM moments WHERE id = ?", [id]);
+}
+
+/** Projects made from this one (e.g. a YouTube video made from a stream). */
+export async function listLinkedProjects(db: Db, sourceProjectId: string): Promise<Project[]> {
+  return (await db.select<Row>("SELECT * FROM projects WHERE source_project_id = ? ORDER BY created_at", [sourceProjectId])).map(toProject);
+}
+
+// ---------------------------------------------------------------- game metadata (v5)
+
+export interface GameMeta {
+  canon: string;
+  /** "steam" now; "igdb" from v0.1.4. */
+  source: string;
+  sourceId: string;
+  name: string;
+  developers: string[];
+  publishers: string[];
+  genres: string[];
+  tags: string[];
+  /** Single-player, co-op, multiplayer, PvP... as the source states them. */
+  modes: string[];
+  releaseYear: number | null;
+  checkedAt: string;
+}
+
+const toMeta = (r: Row): GameMeta => ({
+  canon: str(r.canon),
+  source: str(r.source),
+  sourceId: str(r.source_id),
+  name: str(r.name),
+  developers: parseJson<string[]>(r.developers, []),
+  publishers: parseJson<string[]>(r.publishers, []),
+  genres: parseJson<string[]>(r.genres, []),
+  tags: parseJson<string[]>(r.tags, []),
+  modes: parseJson<string[]>(r.modes, []),
+  releaseYear: numOrNull(r.release_year),
+  checkedAt: str(r.checked_at),
+});
+
+export async function listGameMeta(db: Db): Promise<GameMeta[]> {
+  return (await db.select<Row>("SELECT * FROM game_meta ORDER BY canon, source")).map(toMeta);
+}
+
+export async function saveGameMeta(db: Db, m: GameMeta): Promise<void> {
+  await db.execute(
+    `INSERT INTO game_meta (canon, source, source_id, name, developers, publishers, genres, tags, modes, release_year, checked_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(canon, source) DO UPDATE SET source_id = excluded.source_id, name = excluded.name, developers = excluded.developers,
+       publishers = excluded.publishers, genres = excluded.genres, tags = excluded.tags, modes = excluded.modes,
+       release_year = excluded.release_year, checked_at = excluded.checked_at`,
+    [m.canon, m.source, m.sourceId, m.name, JSON.stringify(m.developers), JSON.stringify(m.publishers), JSON.stringify(m.genres), JSON.stringify(m.tags), JSON.stringify(m.modes), m.releaseYear, m.checkedAt],
+  );
 }
