@@ -5,7 +5,8 @@
 export const THUMB_W = 1280;
 export const THUMB_H = 720;
 export const THUMB_FORMAT = "creator-exe.thumbnail";
-export const THUMB_VERSION = 1;
+/** v2 (CREATOR.EXE 0.2.0) adds optional fields only; v1 files open unchanged. */
+export const THUMB_VERSION = 2;
 
 export interface Shadow {
   color: string;
@@ -35,7 +36,11 @@ interface LayerBase {
   stroke: Stroke | null;
   /** Optional group label; layers sharing it move together in the editor. */
   group: string | null;
+  /** v2: what the layer is for, so the quality checks know what must not overlap. */
+  role?: LayerRole;
 }
+
+export type LayerRole = "backdrop" | "face" | "caption" | "list" | "accent" | "dialog" | "badge";
 
 export interface BackgroundLayer extends LayerBase {
   type: "background";
@@ -44,9 +49,11 @@ export interface BackgroundLayer extends LayerBase {
 
 export interface ShapeLayer extends LayerBase {
   type: "shape";
-  shape: "rect" | "ellipse" | "triangle" | "arrow" | "star";
+  shape: "rect" | "ellipse" | "triangle" | "arrow" | "star" | "curved-arrow";
   fill: string;
   radius: number;
+  /** v2: mirror the shape horizontally (curved arrows point either way). */
+  mirror?: boolean;
 }
 
 export interface TextLayer extends LayerBase {
@@ -61,6 +68,12 @@ export interface TextLayer extends LayerBase {
   lineHeight: number;
   letterSpacing: number;
   uppercase: boolean;
+  /** v2: second colour for a top-to-bottom gradient fill (WordArt style). */
+  fill2?: string | null;
+  /** v2: bend a single line of text along an arc (positive bends upward), in degrees of arc. */
+  arch?: number;
+  /** v2: place lines by the font's cap height so the box hugs the letters. */
+  capBaseline?: boolean;
 }
 
 export interface ImageLayer extends LayerBase {
@@ -73,6 +86,12 @@ export interface ImageLayer extends LayerBase {
   naturalW: number;
   naturalH: number;
   flipX: boolean;
+  /** v2: an outline that follows the image's transparent edges (a sticker-style cutout border). */
+  outline?: Stroke | null;
+  /** v2: simple adjustments: brightness 1 = unchanged, saturate 1 = unchanged. */
+  adjust?: { brightness: number; saturate: number } | null;
+  /** v2: where the visible pixels are inside a cutout (fractions of the source), for overlap checks. */
+  alphaBox?: { x: number; y: number; w: number; h: number } | null;
 }
 
 export type Layer = BackgroundLayer | ShapeLayer | TextLayer | ImageLayer;
@@ -237,4 +256,49 @@ export function withPrimaryText(doc: ThumbnailDoc, text: string): ThumbnailDoc {
   const first = doc.layers.find((l) => l.type === "text");
   if (!first) return doc;
   return updateLayer(doc, first.id, { text } as Partial<TextLayer>);
+}
+
+// ------------------------------------------------------------ groups & alignment (0.2.0)
+
+/** The layers that move with `id`: everything in its group, or just itself. */
+export function groupMembers(doc: ThumbnailDoc, id: string): Layer[] {
+  const l = doc.layers.find((x) => x.id === id);
+  if (!l) return [];
+  return l.group ? doc.layers.filter((x) => x.group === l.group) : [l];
+}
+
+/** Moves layers from their original positions by (dx, dy). Locked layers stay put. */
+export function translateLayers(doc: ThumbnailDoc, origins: Layer[], dx: number, dy: number): ThumbnailDoc {
+  const byId = new Map(origins.filter((o) => !o.locked).map((o) => [o.id, o]));
+  return { ...doc, layers: doc.layers.map((l) => {
+    const o = byId.get(l.id);
+    return o ? ({ ...l, x: o.x + dx, y: o.y + dy } as Layer) : l;
+  }) };
+}
+
+export type Align = "left" | "center" | "right" | "top" | "middle" | "bottom";
+
+/** Union of the layers' boxes (rotation ignored). */
+export function unionBox(layers: Layer[]): { x: number; y: number; w: number; h: number } {
+  const x0 = Math.min(...layers.map((l) => l.x));
+  const y0 = Math.min(...layers.map((l) => l.y));
+  const x1 = Math.max(...layers.map((l) => l.x + l.w));
+  const y1 = Math.max(...layers.map((l) => l.y + l.h));
+  return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+}
+
+/** Aligns a layer (and its group) to the canvas, inside `margin` from the edges. */
+export function alignLayers(doc: ThumbnailDoc, id: string, how: Align, margin = 0): ThumbnailDoc {
+  const members = groupMembers(doc, id);
+  if (!members.length) return doc;
+  const b = unionBox(members);
+  let dx = 0;
+  let dy = 0;
+  if (how === "left") dx = margin - b.x;
+  if (how === "center") dx = (THUMB_W - b.w) / 2 - b.x;
+  if (how === "right") dx = THUMB_W - margin - b.w - b.x;
+  if (how === "top") dy = margin - b.y;
+  if (how === "middle") dy = (THUMB_H - b.h) / 2 - b.y;
+  if (how === "bottom") dy = THUMB_H - margin - b.h - b.y;
+  return translateLayers(doc, members, Math.round(dx), Math.round(dy));
 }

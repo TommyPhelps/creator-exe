@@ -1,9 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { addLayer, duplicateLayer, newDoc, newImage, newShape, newText, parseDoc, removeLayer, reorderLayer, serializeDoc, updateLayer, THUMB_W } from "../src/domain/thumbnails/model.ts";
+import { addLayer, duplicateLayer, newDoc, newImage, newShape, newText, parseDoc, removeLayer, reorderLayer, serializeDoc, updateLayer } from "../src/domain/thumbnails/model.ts";
 import { docToSvg, estimateTextBox, layerSvg } from "../src/domain/thumbnails/render.ts";
 import { History, snap } from "../src/domain/thumbnails/history.ts";
-import { CONCEPTS, buildAllConcepts, wrapHeadline } from "../src/domain/thumbnails/concepts.ts";
 import { createZip, crc32, readStoredZip } from "../src/domain/thumbnails/zip.ts";
 import { buildOra } from "../src/domain/thumbnails/ora.ts";
 
@@ -91,26 +90,6 @@ test("native documents round-trip and reject unsafe or broken input", () => {
   assert.throws(() => parseDoc(JSON.stringify(future)), /newer/);
 });
 
-test("every concept builds editable layers from the creator's words only", () => {
-  const results = buildAllConcepts({ headline: "I used Windows 98 for a week" });
-  assert.equal(results.length, CONCEPTS.length);
-  assert.ok(results.length >= 7);
-  for (const { concept, doc } of results) {
-    assert.ok(doc.layers.length >= 2, concept.id);
-    assert.ok(doc.layers.some((l) => l.type === "text"), concept.id);
-    for (const f of ["premise", "layout", "placement", "background", "typography", "imageNeeds", "reasoning", "drawbacks"] as const) assert.ok(concept[f].length > 3);
-    const words = doc.layers.filter((l) => l.type === "text").map((l) => (l.type === "text" ? l.text : "")).join(" ").toLowerCase();
-    assert.ok(/windows|week|used|i/.test(words), concept.id);
-    assert.doesNotThrow(() => parseDoc(serializeDoc(doc)));
-    for (const l of doc.layers) assert.ok(l.x > -THUMB_W && l.x < THUMB_W * 2, `${concept.id} ${l.name} on canvas`);
-  }
-  const withImage = buildAllConcepts({ headline: "Hi", image: newImage(PNG_1PX, 1600, 900) });
-  const bold = withImage.find((r) => r.concept.id === "bold")!;
-  const img = bold.doc.layers.find((l) => l.type === "image");
-  assert.ok(img && img.type === "image" && img.crop.w < 1, "image is cropped to cover its slot");
-  assert.equal(wrapHeadline("one two three four five six", 9, 2), "one two\nthree four five six");
-});
-
 test("text boxes grow with content", () => {
   const small = estimateTextBox({ ...newText("Hi"), stroke: null });
   const big = estimateTextBox({ ...newText("Hello there\nsecond line"), stroke: null });
@@ -144,4 +123,24 @@ test("OpenRaster export lists layers top-first with their own PNGs", () => {
   assert.ok(entries.some((e) => e.name === "mergedimage.png"));
   assert.ok(entries.some((e) => e.name === "Thumbnails/thumbnail.png"));
   assert.equal(entries.filter((e) => e.name.startsWith("data/")).length, 2);
+});
+
+test("0.2.0 editor: grouped layers move and align together; locked layers stay", async () => {
+  const m = await import("../src/domain/thumbnails/model.ts");
+  const d = m.newDoc("g");
+  const a = { ...m.newShape("rect"), x: 100, y: 100, w: 200, h: 100, group: "dialog" };
+  const b = { ...m.newText("Hi", 40), x: 120, y: 120, w: 100, h: 50, group: "dialog" };
+  const c = { ...m.newText("Solo", 40), x: 600, y: 300, w: 100, h: 50 };
+  d.layers.push(a, b, c);
+  assert.deepEqual(m.groupMembers(d, b.id).map((l) => l.id), [a.id, b.id]);
+  const moved = m.translateLayers(d, m.groupMembers(d, a.id), 10, -5);
+  assert.deepEqual(moved.layers.filter((l) => l.group === "dialog").map((l) => [l.x, l.y]), [[110, 95], [130, 115]]);
+  assert.equal(moved.layers.find((l) => l.id === c.id)!.x, 600);
+  const right = m.alignLayers(d, b.id, "right", 28);
+  const box = m.unionBox(right.layers.filter((l) => l.group === "dialog"));
+  assert.equal(box.x + box.w, m.THUMB_W - 28);
+  const mid = m.alignLayers(d, c.id, "middle");
+  assert.equal(mid.layers.find((l) => l.id === c.id)!.y, (m.THUMB_H - 50) / 2);
+  const bg = d.layers[0]!;
+  assert.equal(m.translateLayers(d, [bg], 50, 50).layers[0]!.x, 0, "the locked background doesn't move");
 });

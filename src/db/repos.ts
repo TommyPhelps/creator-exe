@@ -32,6 +32,7 @@ import type {
   StreamMode,
   StreamSession,
   TaskList,
+  ThumbAsset,
   ThumbnailRecord,
   TitleCandidate,
   UploadPackage,
@@ -715,6 +716,66 @@ export async function saveThumbnail(db: Db, rec: { id?: string; projectId: strin
 
 export async function deleteThumbnail(db: Db, id: string): Promise<void> {
   await db.execute("DELETE FROM thumbnails WHERE id = ?", [id]);
+}
+
+// ---------------------------------------------------------------- thumbnail assets (v6)
+
+const toAsset = (r: Row): ThumbAsset => {
+  let alphaBox: ThumbAsset["alphaBox"] = null;
+  try {
+    const v = r.alpha_box ? JSON.parse(str(r.alpha_box)) : null;
+    if (v && [v.x, v.y, v.w, v.h].every((n: unknown) => typeof n === "number" && Number.isFinite(n))) alphaBox = { x: v.x, y: v.y, w: v.w, h: v.h };
+  } catch {
+    alphaBox = null;
+  }
+  return {
+    id: str(r.id),
+    kind: str(r.kind) === "cutout" ? "cutout" : "screenshot",
+    name: str(r.name),
+    projectId: strOrNull(r.project_id),
+    src: str(r.src),
+    preview: str(r.preview),
+    w: Number(r.w) || 1,
+    h: Number(r.h) || 1,
+    alphaBox,
+    createdAt: str(r.created_at),
+  };
+};
+
+/** Newest first; `src` is left empty (images can be large), use getThumbAsset for it. */
+export async function listThumbAssets(db: Db, kind?: ThumbAsset["kind"]): Promise<ThumbAsset[]> {
+  const cols = "id, kind, name, project_id, '' AS src, preview, w, h, alpha_box, created_at";
+  const rows = kind
+    ? await db.select<Row>(`SELECT ${cols} FROM thumb_assets WHERE kind = ? ORDER BY created_at DESC`, [kind])
+    : await db.select<Row>(`SELECT ${cols} FROM thumb_assets ORDER BY created_at DESC`);
+  return rows.map(toAsset);
+}
+
+export async function getThumbAsset(db: Db, id: string): Promise<ThumbAsset | null> {
+  const rows = await db.select<Row>("SELECT * FROM thumb_assets WHERE id = ?", [id]);
+  return rows[0] ? toAsset(rows[0]) : null;
+}
+
+export async function addThumbAsset(db: Db, a: Omit<ThumbAsset, "id" | "createdAt">): Promise<ThumbAsset> {
+  if (!a.src.startsWith("data:image/")) throw new Error("Only embedded images can be kept in the library.");
+  const rec: ThumbAsset = { ...a, id: newId(), createdAt: nowIso() };
+  await db.execute("INSERT INTO thumb_assets (id, kind, name, project_id, src, preview, w, h, alpha_box, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", [
+    rec.id,
+    rec.kind,
+    rec.name,
+    rec.projectId,
+    rec.src,
+    rec.preview,
+    Math.round(rec.w),
+    Math.round(rec.h),
+    rec.alphaBox ? JSON.stringify(rec.alphaBox) : null,
+    rec.createdAt,
+  ]);
+  return rec;
+}
+
+export async function deleteThumbAsset(db: Db, id: string): Promise<void> {
+  await db.execute("DELETE FROM thumb_assets WHERE id = ?", [id]);
 }
 
 // ---------------------------------------------------------------- titles & packages

@@ -449,6 +449,22 @@ export interface UploadPackage {
 
 // ---------- Thumbnails ----------
 
+/** A cut-out of you or a screenshot kept in the Thumbnail Lab library (v0.2.0). */
+export interface ThumbAsset {
+  id: string;
+  kind: "cutout" | "screenshot";
+  name: string;
+  projectId: string | null;
+  /** data: URL (empty in list results; load with getThumbAsset). */
+  src: string;
+  /** Small data: URL for strips. */
+  preview: string;
+  w: number;
+  h: number;
+  alphaBox: { x: number; y: number; w: number; h: number } | null;
+  createdAt: string;
+}
+
 export interface ThumbnailRecord {
   id: string;
   projectId: string | null;

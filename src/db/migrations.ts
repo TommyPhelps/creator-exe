@@ -320,7 +320,37 @@ export const MIGRATIONS: Migration[] = [
     statements: [],
     run: addStreamsAndMeta,
   },
+  {
+    version: 6,
+    name: "Thumbnail Lab: your cut-outs and screenshots",
+    statements: [],
+    run: addThumbAssets,
+  },
 ];
+
+/**
+ * v6 (v0.2.0). Additive: a library of the cut-outs and screenshots you add in
+ * the Thumbnail Lab, so a face cut once can be reused. Existing thumbnails are
+ * untouched (their images stay embedded in each thumbnail).
+ */
+export async function addThumbAssets(db: Db): Promise<string[]> {
+  const have = await tableNames(db);
+  if (have.has("thumb_assets")) return [];
+  await db.execute(`CREATE TABLE IF NOT EXISTS thumb_assets (
+    id TEXT PRIMARY KEY,
+    kind TEXT NOT NULL,
+    name TEXT NOT NULL DEFAULT '',
+    project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
+    src TEXT NOT NULL,
+    preview TEXT NOT NULL DEFAULT '',
+    w INTEGER NOT NULL,
+    h INTEGER NOT NULL,
+    alpha_box TEXT,
+    created_at TEXT NOT NULL
+  )`);
+  await db.execute("CREATE INDEX IF NOT EXISTS idx_thumb_assets_kind ON thumb_assets(kind, created_at)");
+  return ["added table thumb_assets"];
+}
 
 /**
  * v5 (v0.1.3). Additive and existence-checked like v3/v4: every existing
@@ -418,6 +448,7 @@ export const BACKUP_TABLES = [
   "stream_sessions",
   "moments",
   "game_meta",
+  "thumb_assets",
 ] as const;
 
 export type BackupTable = (typeof BACKUP_TABLES)[number];
