@@ -138,7 +138,7 @@ Run these on the installed app. Each maps to a success workflow in the brief.
 
 ## v0.2.0
 
-Thumbnail Lab, face cut-out, design system. Released only after Tommy approves sample thumbnails made from his own photos and screenshots.
+Thumbnail Lab, face cut-out, design system. Tommy asked (2026-10-19) to release without supplying extra photos; verification used his channel thumbnails as references and clearly labelled low-res crops as test images.
 
 | Requirement | How it is checked |
 | --- | --- |
@@ -149,6 +149,11 @@ Thumbnail Lab, face cut-out, design system. Released only after Tommy approves s
 | "Inspired by" | Reference style comes first with its colour and side (test) |
 | Face cut-out on device, with consent | Rust `cutout` module: consent dialog → download → SHA-256 check; CI runs real inference with the bundled onnxruntime.dll |
 | Layered export for Affinity | `src/domain/thumbnails/psd.ts`; PSD structure test; files read back with Pillow and ImageMagick |
+| Works without a facecam | ≥3 concepts with no cut-out, none with a face layer (test) |
+| Any imported image works | 8 sizes × 4 cut-out shapes × 5 captions, no errors (test) |
+| Honest about soft images | `low-res` check above 1.6× enlargement (test) |
+| Cut-outs are reviewed | Keep/Discard dialog before saving; verified with a photo containing no person |
+| PNG/PSD/SVG/ORA exports | Driven in the UI; PSD layers match, PSD composite == PNG, ORA valid |
 | Old thumbnails keep working | v1 documents parse and render (test) |
-| Safe migration | Schema v6 is additive (`thumb_assets`), tested |
+| Safe migration | Schema v6 is additive (`thumb_assets`); a 0.1.3 database upgrades with thumbnails and projects byte-for-byte unchanged (test) |
 | New aesthetic at 1440p | Screenshots at 2560×1440 |
