@@ -144,7 +144,10 @@ export function Settings() {
       <PageHead sys="SETTINGS :: CONTROL PANEL" title="Settings" lede="Appearance, integrations, folders and your data. Everything stays on this PC." />
       <div className="grid cols-2">
         <Win title="APPEARANCE" icon="control">
-          <Field label="Theme">{(id) => <Select id={id} value={settings.theme} options={THEMES} onChange={(v) => void updateSettings({ theme: v })} />}</Field>
+          <Field label="Accent colour">{(id) => <Select id={id} value={settings.theme} options={THEMES} onChange={(v) => void updateSettings({ theme: v })} />}</Field>
+          <Check checked={settings.ideaCovers} onChange={(v) => void updateSettings({ ideaCovers: v })}>
+            Show cover art on idea cards
+          </Check>
           <div className="row">
             <span className="label">Density</span>
             <Segmented<Density>

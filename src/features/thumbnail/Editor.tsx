@@ -1,12 +1,15 @@
-// Layered thumbnail editor. The canvas is the same SVG the exporter writes,
-// so every layer stays independently editable inside and outside the app.
-import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState, type PointerEvent as RPointerEvent, type RefObject } from "react";
+// Slim layered thumbnail editor (0.2.0). The canvas is the same SVG the
+// exporter writes. Live checks flag text over your face, text over text,
+// the timestamp corner and words too small for a phone, as you work.
+import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState, type CSSProperties, type PointerEvent as RPointerEvent, type RefObject } from "react";
 import { useApp } from "../../app/context.tsx";
 import {
   THUMB_H,
   THUMB_W,
   addLayer,
+  alignLayers,
   duplicateLayer,
+  groupMembers,
   newBackground,
   newImage,
   newShape,
@@ -14,20 +17,26 @@ import {
   removeLayer,
   reorderLayer,
   serializeDoc,
+  translateLayers,
   updateLayer,
+  type Align,
   type BackgroundLayer,
   type ImageLayer,
   type Layer,
+  type LayerRole,
   type ShapeLayer,
   type TextLayer,
   type ThumbnailDoc,
 } from "../../domain/thumbnails/model.ts";
 import { FONT_STACKS, docToSvg, layerDefs, layerSvg } from "../../domain/thumbnails/render.ts";
 import { History, snap } from "../../domain/thumbnails/history.ts";
+import { SAFE_MARGIN, TIMESTAMP_ZONE, checkDoc, layerBox, visibleBox } from "../../domain/thumbnails/quality.ts";
+import { FONT_METRICS } from "../../domain/thumbnails/fontMetrics.ts";
 import { mimeForPath } from "../../lib/base64.ts";
-import { Button, Check, Dialog, Note, Segmented, Select } from "../../ui/kit.tsx";
+import { Button, Check, Dialog, Note, Segmented, Select, Splitter, usePaneWidth } from "../../ui/kit.tsx";
 import { Icon } from "../../ui/icons.tsx";
-import { bytesToBase64, docToOra, docToPng, fitText, imageSize } from "./raster.ts";
+import { bytesToBase64, docToOra, docToPng, docToPsd, fitText, imageSize } from "./raster.ts";
+import { preloadPageFonts } from "./fonts.ts";
 
 type Handle = "nw" | "n" | "ne" | "e" | "se" | "s" | "sw" | "w" | "rot";
 interface DragState {
@@ -36,6 +45,8 @@ interface DragState {
   id: string;
   start: { x: number; y: number };
   orig: Layer;
+  /** Everything that moves with the layer (its group). */
+  group: Layer[];
   moved: boolean;
 }
 
@@ -52,7 +63,26 @@ function contains(l: Layer, px: number, py: number): boolean {
   return Math.abs(p.x) <= l.w / 2 && Math.abs(p.y) <= l.h / 2;
 }
 
-const FONTS = Object.keys(FONT_STACKS).map((f) => ({ id: f, label: f }));
+// Bundled fonts first (they look the same everywhere and in exports), then system fonts for older thumbnails.
+const FONTS = Object.keys(FONT_STACKS).map((f) => ({ id: f, label: FONT_METRICS[f] ? f : `${f} (system)` }));
+const ROLES: { id: LayerRole | ""; label: string }[] = [
+  { id: "", label: "Not set" },
+  { id: "face", label: "Your face (keep text off it)" },
+  { id: "backdrop", label: "Background screenshot" },
+  { id: "caption", label: "Caption" },
+  { id: "list", label: "List line" },
+  { id: "accent", label: "Arrow / accent (keep off text)" },
+  { id: "dialog", label: "Error box part" },
+  { id: "badge", label: "Small badge" },
+];
+const SHAPES: { id: ShapeLayer["shape"]; label: string }[] = [
+  { id: "curved-arrow", label: "Curved arrow" },
+  { id: "arrow", label: "Straight arrow" },
+  { id: "rect", label: "Rectangle" },
+  { id: "ellipse", label: "Circle / ellipse" },
+  { id: "triangle", label: "Triangle" },
+  { id: "star", label: "Starburst" },
+];
 
 function NumberField(p: { label: string; value: number; onChange: (v: number) => void; step?: number; min?: number; max?: number }) {
   return (
@@ -90,9 +120,9 @@ function ColorField(p: { label: string; value: string; onChange: (v: string) => 
   return (
     <label className="field">
       <span className="label">{p.label}</span>
-      <span className="row nowrap">
+      <span className="row nowrap" style={{ gap: 6 }}>
         <input className="color" type="color" value={hex} onChange={(e) => p.onChange(e.target.value)} />
-        <input className="input mono" value={p.value} onChange={(e) => p.onChange(e.target.value)} style={{ width: 100 }} />
+        <input className="input mono" value={p.value} onChange={(e) => p.onChange(e.target.value)} style={{ width: 110 }} />
       </span>
     </label>
   );
@@ -104,6 +134,10 @@ export interface EditorProps {
   onSave: (doc: ThumbnailDoc) => Promise<void>;
   onClose: () => void;
   onAddReference: () => Promise<ImageLayer | null>;
+  /** Picks (or makes) a cut-out of you from the library. */
+  onAddCutout: () => Promise<ImageLayer | null>;
+  /** The video title, for the YouTube previews. */
+  videoTitle?: string;
   /** True when the document has never been saved. */
   unsaved?: boolean;
 }
@@ -116,13 +150,17 @@ export function Editor(props: EditorProps) {
   const [sel, setSel] = useState<string | null>(null);
   const [zoom, setZoom] = useState<number | "fit">("fit");
   const [fit, setFit] = useState(0.6);
-  const [grid, setGrid] = useState(false);
   const [snapOn, setSnapOn] = useState(true);
   const [safe, setSafe] = useState(true);
+  const [showIssues, setShowIssues] = useState(true);
   const [guides, setGuides] = useState<{ x: number | null; y: number | null }>({ x: null, y: null });
   const [dirty, setDirty] = useState(!!props.unsaved);
   const [exportDlg, setExportDlg] = useState(false);
+  const [ytDlg, setYtDlg] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [leftW, setLeftW, saveLeftW] = usePaneWidth("editor-left", 250);
+  const [rightW, setRightW, saveRightW] = usePaneWidth("editor-right", 340);
+  const [, fontsReady] = useReducer((n: number) => n + 1, 0);
   const drag = useRef<DragState | null>(null);
   const lastEdit = useRef<{ key: string; t: number } | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -131,13 +169,20 @@ export function Editor(props: EditorProps) {
 
   const scale = zoom === "fit" ? fit : zoom;
   const selected = doc.layers.find((l) => l.id === sel) ?? null;
+  const issues = useMemo(() => checkDoc(doc), [doc]);
+  const issueIds = useMemo(() => new Set(issues.flatMap((i) => i.layerIds)), [issues]);
+  const errorIds = useMemo(() => new Set(issues.filter((i) => i.level === "error").flatMap((i) => i.layerIds)), [issues]);
+
+  useEffect(() => {
+    void preloadPageFonts().then(fontsReady);
+  }, []);
 
   useLayoutEffect(() => {
     const el = wrapRef.current;
     if (!el) return;
     const ro = new ResizeObserver(() => {
       const r = el.getBoundingClientRect();
-      setFit(Math.max(0.2, Math.min((r.width - 40) / THUMB_W, (r.height - 40) / THUMB_H)));
+      setFit(Math.max(0.2, Math.min((r.width - 32) / THUMB_W, (r.height - 32) / THUMB_H)));
     });
     ro.observe(el);
     return () => ro.disconnect();
@@ -183,6 +228,19 @@ export function Editor(props: EditorProps) {
     }
   }, [props]);
 
+  const undo = () => {
+    history.current.undo();
+    lastEdit.current = null;
+    setDirty(true);
+    force();
+  };
+  const redo = () => {
+    history.current.redo();
+    lastEdit.current = null;
+    setDirty(true);
+    force();
+  };
+
   // Keyboard shortcuts.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -197,11 +255,8 @@ export function Editor(props: EditorProps) {
       if (typing) return;
       if (e.ctrlKey && (k === "z" || k === "y")) {
         e.preventDefault();
-        if (k === "z" && !e.shiftKey) history.current.undo();
-        else history.current.redo();
-        lastEdit.current = null;
-        setDirty(true);
-        force();
+        if (k === "z" && !e.shiftKey) undo();
+        else redo();
         return;
       }
       if (!selected) return;
@@ -222,12 +277,13 @@ export function Editor(props: EditorProps) {
         const step = e.shiftKey ? 10 : 1;
         const dx = k === "arrowleft" ? -step : k === "arrowright" ? step : 0;
         const dy = k === "arrowup" ? -step : k === "arrowdown" ? step : 0;
-        patch(selected.id, { x: selected.x + dx, y: selected.y + dy }, `${selected.id}:nudge`);
+        const cur = history.current.present;
+        commit(translateLayers(cur, groupMembers(cur, selected.id), dx, dy), `${selected.id}:nudge`);
       } else if (k === "escape") setSel(null);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [selected, commit, patch, save]);
+  });
 
   const addImageFromPath = useCallback(
     async (path: string) => {
@@ -251,12 +307,14 @@ export function Editor(props: EditorProps) {
   useEffect(() => {
     let off: (() => void) | null = null;
     let alive = true;
-    void platform.onFileDrop((paths) => {
-      for (const p of paths) void addImageFromPath(p);
-    }).then((u) => {
-      if (alive) off = u;
-      else u();
-    });
+    void platform
+      .onFileDrop((paths) => {
+        for (const p of paths) void addImageFromPath(p);
+      })
+      .then((u) => {
+        if (alive) off = u;
+        else u();
+      });
     return () => {
       alive = false;
       off?.();
@@ -270,12 +328,12 @@ export function Editor(props: EditorProps) {
     const target = e.target as Element;
     const handle = target.getAttribute("data-handle") as Handle | null;
     if (handle && selected) {
-      drag.current = { mode: handle === "rot" ? "rotate" : "resize", handle, id: selected.id, start: p, orig: selected, moved: false };
+      drag.current = { mode: handle === "rot" ? "rotate" : "resize", handle, id: selected.id, start: p, orig: selected, group: [selected], moved: false };
       (e.currentTarget as Element).setPointerCapture(e.pointerId);
       return;
     }
     const g = target.closest("[data-layers] > g[id]");
-    let hit = g ? doc.layers.find((l) => l.id === g.id) ?? null : null;
+    let hit = g ? (doc.layers.find((l) => l.id === g.id) ?? null) : null;
     if (hit?.locked) {
       const unlocked = [...doc.layers].reverse().find((l) => l.visible && !l.locked && contains(l, p.x, p.y));
       if (unlocked) hit = unlocked;
@@ -286,7 +344,7 @@ export function Editor(props: EditorProps) {
     }
     setSel(hit.id);
     if (!hit.locked) {
-      drag.current = { mode: "move", id: hit.id, start: p, orig: hit, moved: false };
+      drag.current = { mode: "move", id: hit.id, start: p, orig: hit, group: groupMembers(doc, hit.id), moved: false };
       (e.currentTarget as Element).setPointerCapture(e.pointerId);
     }
   };
@@ -303,27 +361,28 @@ export function Editor(props: EditorProps) {
       let gx: number | null = null;
       let gy: number | null = null;
       if (snapOn && !e.altKey) {
-        const others = doc.layers.filter((l) => l.id !== o.id && l.visible && l.type !== "background");
-        const xs = [0, THUMB_W / 2, THUMB_W, ...others.flatMap((l) => [l.x, l.x + l.w / 2, l.x + l.w])];
-        const ys = [0, THUMB_H / 2, THUMB_H, ...others.flatMap((l) => [l.y, l.y + l.h / 2, l.y + l.h])];
+        const ids = new Set(d.group.map((l) => l.id));
+        const others = doc.layers.filter((l) => !ids.has(l.id) && l.visible && l.type !== "background" && l.role !== "backdrop");
+        const xs = [0, SAFE_MARGIN, THUMB_W / 2, THUMB_W - SAFE_MARGIN, THUMB_W, ...others.flatMap((l) => [l.x, l.x + l.w / 2, l.x + l.w])];
+        const ys = [0, SAFE_MARGIN, THUMB_H / 2, THUMB_H - SAFE_MARGIN, THUMB_H, ...others.flatMap((l) => [l.y, l.y + l.h / 2, l.y + l.h])];
         const candX = [snap(x, xs, null), snap(x + o.w / 2, xs, null), snap(x + o.w, xs, null)];
         const offX = [0, o.w / 2, o.w];
         const bx = candX.findIndex((c) => c.guide !== null);
         if (bx >= 0) {
           gx = candX[bx]!.value;
           x = gx - offX[bx]!;
-        } else if (grid) x = snap(x, [], 20).value;
+        }
         const candY = [snap(y, ys, null), snap(y + o.h / 2, ys, null), snap(y + o.h, ys, null)];
         const offY = [0, o.h / 2, o.h];
         const by = candY.findIndex((c) => c.guide !== null);
         if (by >= 0) {
           gy = candY[by]!.value;
           y = gy - offY[by]!;
-        } else if (grid) y = snap(y, [], 20).value;
+        }
       }
       setGuides({ x: gx, y: gy });
       d.moved = true;
-      patch(d.id, { x, y }, key);
+      commit(translateLayers(history.current.present, d.group, x - o.x, y - o.y), key);
       return;
     }
     const cx = o.x + o.w / 2;
@@ -384,56 +443,74 @@ export function Editor(props: EditorProps) {
   // ---------------------------------------------------------- rendering
   const defs = useMemo(() => doc.layers.map(layerDefs).join(""), [doc]);
   const hs = 10 / scale;
+  const group = selected ? groupMembers(doc, selected.id) : [];
 
   const selectionOverlay = selected ? (
-    <g transform={`translate(${selected.x + selected.w / 2} ${selected.y + selected.h / 2}) rotate(${selected.rotation}) translate(${-selected.w / 2} ${-selected.h / 2})`} pointerEvents={selected.locked ? "none" : "all"}>
-      <rect x={0} y={0} width={selected.w} height={selected.h} fill="none" stroke="#4fc3ff" strokeWidth={2 / scale} strokeDasharray={`${6 / scale} ${4 / scale}`} pointerEvents="none" />
-      {selected.locked || selected.type === "background"
-        ? null
-        : (
-            [
-              ["nw", 0, 0],
-              ["n", selected.w / 2, 0],
-              ["ne", selected.w, 0],
-              ["e", selected.w, selected.h / 2],
-              ["se", selected.w, selected.h],
-              ["s", selected.w / 2, selected.h],
-              ["sw", 0, selected.h],
-              ["w", 0, selected.h / 2],
-            ] as [Handle, number, number][]
-          )
-            .filter(([h]) => selected.type !== "text" || h.length === 2)
-            .map(([h, x, y]) => (
-              <rect key={h} data-handle={h} x={x - hs / 2} y={y - hs / 2} width={hs} height={hs} fill="#ffffff" stroke="#000000" strokeWidth={1 / scale} style={{ cursor: `${h}-resize` }} />
-            ))}
-      {selected.locked || selected.type === "background" ? null : (
-        <>
-          <line x1={selected.w / 2} y1={0} x2={selected.w / 2} y2={-30 / scale} stroke="#4fc3ff" strokeWidth={1.5 / scale} pointerEvents="none" />
-          <circle data-handle="rot" cx={selected.w / 2} cy={-30 / scale} r={hs * 0.7} fill="#4fc3ff" stroke="#000" strokeWidth={1 / scale} style={{ cursor: "grab" }} />
-        </>
-      )}
-    </g>
+    <>
+      {group.length > 1
+        ? group
+            .filter((g) => g.id !== selected.id)
+            .map((g) => {
+              const b = layerBox(g);
+              return <rect key={g.id} x={b.x} y={b.y} width={b.w} height={b.h} fill="none" stroke="var(--accent)" strokeOpacity={0.5} strokeWidth={1 / scale} strokeDasharray={`${4 / scale} ${4 / scale}`} pointerEvents="none" />;
+            })
+        : null}
+      <g transform={`translate(${selected.x + selected.w / 2} ${selected.y + selected.h / 2}) rotate(${selected.rotation}) translate(${-selected.w / 2} ${-selected.h / 2})`} pointerEvents={selected.locked ? "none" : "all"}>
+        <rect x={0} y={0} width={selected.w} height={selected.h} fill="none" stroke="var(--accent)" strokeWidth={1.5 / scale} pointerEvents="none" />
+        {selected.locked || selected.type === "background"
+          ? null
+          : (
+              [
+                ["nw", 0, 0],
+                ["n", selected.w / 2, 0],
+                ["ne", selected.w, 0],
+                ["e", selected.w, selected.h / 2],
+                ["se", selected.w, selected.h],
+                ["s", selected.w / 2, selected.h],
+                ["sw", 0, selected.h],
+                ["w", 0, selected.h / 2],
+              ] as [Handle, number, number][]
+            )
+              .filter(([h]) => selected.type !== "text" || h.length === 2)
+              .map(([h, x, y]) => <rect key={h} data-handle={h} x={x - hs / 2} y={y - hs / 2} width={hs} height={hs} fill="#ffffff" stroke="#000000" strokeWidth={1 / scale} style={{ cursor: `${h}-resize` }} />)}
+        {selected.locked || selected.type === "background" ? null : (
+          <>
+            <line x1={selected.w / 2} y1={0} x2={selected.w / 2} y2={-28 / scale} stroke="var(--accent)" strokeWidth={1.5 / scale} pointerEvents="none" />
+            <circle data-handle="rot" cx={selected.w / 2} cy={-28 / scale} r={hs * 0.6} fill="var(--accent)" stroke="#000" strokeWidth={1 / scale} style={{ cursor: "grab" }} />
+          </>
+        )}
+      </g>
+    </>
   ) : null;
 
+  const issueOverlay = showIssues
+    ? doc.layers
+        .filter((l) => l.visible && issueIds.has(l.id) && l.id !== sel)
+        .map((l) => {
+          const b = l.type === "image" && l.role === "face" ? visibleBox(l) : layerBox(l);
+          return <rect key={`iss-${l.id}`} x={b.x} y={b.y} width={b.w} height={b.h} fill="none" stroke={errorIds.has(l.id) ? "#e5625c" : "#d9a441"} strokeWidth={2 / scale} strokeDasharray={`${8 / scale} ${5 / scale}`} pointerEvents="none" />;
+        })
+    : null;
+
   const add = (layer: Layer) => {
-    const l = layer.type === "text" ? fitText(layer) : layer;
+    const l = layer.type === "text" ? fitText({ ...layer, fontFamily: "Lato", fontWeight: 900, capBaseline: true, role: "caption" }) : layer;
     commit(addLayer(history.current.present, l, sel));
     setSel(l.id);
   };
 
-  const exportFile = async (kind: "png" | "svg" | "ora" | "cthumb") => {
+  const exportFile = async (kind: "png" | "psd" | "svg" | "ora" | "cthumb") => {
     const base = (doc.name || "thumbnail").replace(/[<>:"/\\|?*]/g, "-");
-    const ext = kind === "cthumb" ? "cthumb" : kind;
-    const filters = { png: "PNG image", svg: "SVG (editable vector)", ora: "OpenRaster (layers)", cthumb: "CREATOR.EXE thumbnail" };
-    const path = await platform.dialogs.saveFile(`Export ${filters[kind]}`, `${base}.${ext}`, [{ name: filters[kind], extensions: [ext] }]);
+    const names = { png: "PNG image", psd: "Photoshop / Affinity layers", svg: "SVG (editable vector)", ora: "OpenRaster (layers)", cthumb: "CREATOR.EXE thumbnail" };
+    const path = await platform.dialogs.saveFile(`Export ${names[kind]}`, `${base}.${kind}`, [{ name: names[kind], extensions: [kind] }]);
     if (!path) return;
     setBusy(true);
     try {
       if (kind === "png") await platform.files.writeBinary(path, bytesToBase64(await docToPng(doc)));
+      if (kind === "psd") await platform.files.writeBinary(path, bytesToBase64(await docToPsd(doc)));
       if (kind === "svg") await platform.files.writeText(path, docToSvg(doc));
       if (kind === "ora") await platform.files.writeBinary(path, bytesToBase64(await docToOra(doc)));
       if (kind === "cthumb") await platform.files.writeText(path, serializeDoc(doc));
-      toast("THUMBNAIL.EXE EXPORTED", path);
+      toast("EXPORTED", path);
     } catch (e) {
       toast("EXPORT FAILED", e instanceof Error ? e.message : String(e), "err");
     } finally {
@@ -443,32 +520,30 @@ export function Editor(props: EditorProps) {
 
   const layersTopFirst = [...doc.layers].reverse();
   const svgContent = doc.layers.map((l) => layerSvg(l)).join("");
+  const errors = issues.filter((i) => i.level === "error").length;
 
   return (
-    <div className="stack" style={{ height: "calc(100vh - 210px)", minHeight: 560 }}>
-      <div className="toolbar" style={{ boxShadow: "var(--raised)" }}>
+    <div className="stack" style={{ height: "calc(100vh - 190px)", minHeight: 600, gap: 8 }}>
+      <div className="toolbar" style={{ border: "1px solid var(--border)", flexWrap: "wrap" }}>
         <Button icon="save" variant={dirty ? "primary" : undefined} onClick={() => void save()} disabled={busy} title="Save (Ctrl+S)">
           {dirty ? "Save" : "Saved"}
         </Button>
-        <Button icon="undo" title="Undo (Ctrl+Z)" disabled={!history.current.canUndo} onClick={() => (history.current.undo(), setDirty(true), force())} />
-        <Button icon="redo" title="Redo (Ctrl+Y)" disabled={!history.current.canRedo} onClick={() => (history.current.redo(), setDirty(true), force())} />
+        <Button icon="undo" title="Undo (Ctrl+Z)" disabled={!history.current.canUndo} onClick={undo} />
+        <Button icon="redo" title="Redo (Ctrl+Y)" disabled={!history.current.canRedo} onClick={redo} />
         <span className="sep" />
-        <Button icon="text" onClick={() => add(newText("YOUR TEXT"))}>
+        <Button icon="text" onClick={() => add(newText("YOUR WORDS", 110))}>
           Text
         </Button>
-        <Select
-          value=""
-          options={[
-            { id: "", label: "+ Shape" },
-            { id: "rect", label: "Rectangle" },
-            { id: "ellipse", label: "Ellipse" },
-            { id: "triangle", label: "Triangle" },
-            { id: "arrow", label: "Arrow" },
-            { id: "star", label: "Starburst" },
-          ]}
-          onChange={(v) => v && add(newShape(v as ShapeLayer["shape"]))}
-          className=""
-        />
+        <Button
+          icon="user"
+          title="Add a cut-out of you"
+          onClick={async () => {
+            const l = await props.onAddCutout();
+            if (l) add(l);
+          }}
+        >
+          You
+        </Button>
         <Button
           icon="image"
           onClick={async () => {
@@ -478,9 +553,20 @@ export function Editor(props: EditorProps) {
         >
           Image
         </Button>
+        <Select
+          value=""
+          options={[{ id: "", label: "+ Shape" }, ...SHAPES, { id: "bg", label: "Colour background" }] as { id: string; label: string }[]}
+          onChange={(v) => {
+            if (!v) return;
+            if (v === "bg") add(newBackground(["#1b1b1b", "#050505"]));
+            else if (v === "curved-arrow") add({ ...newShape("curved-arrow", "#e8261f"), w: 260, h: 220, stroke: { color: "#000000", width: 8 }, role: "accent", name: "Arrow" });
+            else add(newShape(v as ShapeLayer["shape"], v === "arrow" ? "#e8261f" : "#e8c547"));
+          }}
+          className=""
+        />
         <Button
           icon="channel"
-          title="Add one of your old thumbnails as a faint, locked reference layer"
+          title="Add one of your old thumbnails as a faint, locked layer to line things up"
           onClick={async () => {
             const l = await props.onAddReference();
             if (l) add(l);
@@ -488,16 +574,15 @@ export function Editor(props: EditorProps) {
         >
           Reference
         </Button>
-        <Button onClick={() => add(newBackground(["#1b2333", "#0f1626"]))}>Background</Button>
         <span className="sep" />
         <Check checked={snapOn} onChange={setSnapOn}>
           Snap
         </Check>
-        <Check checked={grid} onChange={setGrid}>
-          Grid
-        </Check>
         <Check checked={safe} onChange={setSafe}>
           Safe area
+        </Check>
+        <Check checked={showIssues} onChange={setShowIssues}>
+          Mark problems
         </Check>
         <Select
           value={zoom === "fit" ? "fit" : String(zoom)}
@@ -511,21 +596,26 @@ export function Editor(props: EditorProps) {
           className=""
         />
         <span className="spacer" />
+        <Button icon="play" onClick={() => setYtDlg(true)}>
+          Preview on YouTube
+        </Button>
         <Button icon="export" onClick={() => setExportDlg(true)}>
           Export
         </Button>
         <Button onClick={async () => (!dirty || (await confirmLeave())) && props.onClose()}>Close</Button>
       </div>
 
-      <div className="editor" style={{ flex: 1 }}>
+      <div className="editor" style={{ flex: 1, "--ed-left": `${leftW}px`, "--ed-right": `${rightW}px` } as CSSProperties}>
         <section className="win">
           <div className="titlebar">
-            <Icon name="layers" /> LAYERS
+            <Icon name="layers" /> Layers
+            <span className="tb-spacer" />
+            <span className="tb-meta">{doc.layers.length}</span>
           </div>
-          <div className="content" style={{ padding: 4, gap: 4 }}>
+          <div className="content" style={{ padding: 0, gap: 0 }}>
             <div className="layers" role="listbox" aria-label="Layers, top first">
               {layersTopFirst.map((l) => (
-                <div key={l.id} className={`layer-row ${sel === l.id ? "sel" : ""}`} role="option" aria-selected={sel === l.id} onClick={() => setSel(l.id)}>
+                <div key={l.id} className={`layer-row ${sel === l.id ? "sel" : ""} ${issueIds.has(l.id) ? "issue" : ""}`} role="option" aria-selected={sel === l.id} onClick={() => setSel(l.id)}>
                   <button title={l.visible ? "Hide" : "Show"} onClick={(e) => (e.stopPropagation(), patch(l.id, { visible: !l.visible }))}>
                     <Icon name={l.visible ? "eye" : "eyeoff"} />
                   </button>
@@ -535,24 +625,39 @@ export function Editor(props: EditorProps) {
                   <span className="ellipsis" title={l.name}>
                     {l.name}
                   </span>
+                  <span className="role">{l.group ? "group" : l.role === "face" ? "you" : ""}</span>
                 </div>
               ))}
             </div>
             {selected ? (
-              <div className="row" style={{ gap: 2 }}>
+              <div className="row" style={{ gap: 2, padding: 6, borderTop: "1px solid var(--border)" }}>
                 <Button size="small" icon="up" title="Bring forward (Ctrl+])" onClick={() => commit(reorderLayer(doc, selected.id, 1))} />
                 <Button size="small" icon="down" title="Send backward (Ctrl+[)" onClick={() => commit(reorderLayer(doc, selected.id, -1))} />
-                <Button size="small" icon="copy" title="Duplicate (Ctrl+D)" onClick={() => {
-                  const r = duplicateLayer(doc, selected.id);
-                  commit(r.doc);
-                  setSel(r.newId);
-                }} />
+                <Button
+                  size="small"
+                  icon="copy"
+                  title="Duplicate (Ctrl+D)"
+                  onClick={() => {
+                    const r = duplicateLayer(doc, selected.id);
+                    commit(r.doc);
+                    setSel(r.newId);
+                  }}
+                />
                 <Button size="small" icon="trash" title="Delete (Del)" onClick={() => (commit(removeLayer(doc, selected.id)), setSel(null))} />
+                {selected.group ? (
+                  <Button size="small" variant="flat" title="Let this layer move on its own" onClick={() => patch(selected.id, { group: null })}>
+                    Ungroup
+                  </Button>
+                ) : null}
               </div>
             ) : null}
-            <p className="dim small">Drop image files from Explorer onto the window to add them.</p>
+            <p className="dim small" style={{ padding: "6px 8px" }}>
+              Drop image files from Explorer onto the window to add them.
+            </p>
           </div>
         </section>
+
+        <Splitter label="Resize the layers panel" value={leftW} min={180} max={420} onChange={setLeftW} onDone={saveLeftW} />
 
         <div className="stagewrap" ref={wrapRef}>
           <div className="stage" style={{ width: THUMB_W * scale, height: THUMB_H * scale }}>
@@ -571,54 +676,74 @@ export function Editor(props: EditorProps) {
             >
               <defs dangerouslySetInnerHTML={{ __html: defs }} />
               <g data-layers="" dangerouslySetInnerHTML={{ __html: svgContent }} />
-              {grid ? (
-                <g pointerEvents="none" opacity={0.25}>
-                  {Array.from({ length: THUMB_W / 40 }, (_, i) => (
-                    <line key={`v${i}`} x1={i * 40} y1={0} x2={i * 40} y2={THUMB_H} stroke="#fff" strokeWidth={1 / scale} />
-                  ))}
-                  {Array.from({ length: THUMB_H / 40 }, (_, i) => (
-                    <line key={`h${i}`} x1={0} y1={i * 40} x2={THUMB_W} y2={i * 40} stroke="#fff" strokeWidth={1 / scale} />
-                  ))}
-                </g>
-              ) : null}
               {safe ? (
                 <g pointerEvents="none">
-                  <rect x={THUMB_W - 190} y={THUMB_H - 82} width={170} height={60} fill="rgba(0,0,0,.55)" stroke="#ffcc00" strokeDasharray="8 6" strokeWidth={2 / scale} />
-                  <text x={THUMB_W - 105} y={THUMB_H - 45} fill="#ffcc00" fontSize={22} textAnchor="middle" fontFamily="Tahoma, Segoe UI, sans-serif">
-                    timestamp
+                  <rect x={TIMESTAMP_ZONE.x} y={TIMESTAMP_ZONE.y} width={TIMESTAMP_ZONE.w} height={TIMESTAMP_ZONE.h} fill="rgba(0,0,0,.45)" stroke="#ffffff" strokeOpacity={0.5} strokeDasharray="6 5" strokeWidth={1.5 / scale} />
+                  <text x={TIMESTAMP_ZONE.x + TIMESTAMP_ZONE.w / 2} y={TIMESTAMP_ZONE.y + TIMESTAMP_ZONE.h / 2 + 7} fill="#ffffff" fillOpacity={0.7} fontSize={20} textAnchor="middle" fontFamily="Inter, sans-serif">
+                    video length
                   </text>
-                  <rect x={40} y={36} width={THUMB_W - 80} height={THUMB_H - 72} fill="none" stroke="#ffcc00" strokeOpacity={0.4} strokeDasharray="10 8" strokeWidth={1.5 / scale} />
+                  <rect x={SAFE_MARGIN} y={SAFE_MARGIN} width={THUMB_W - SAFE_MARGIN * 2} height={THUMB_H - SAFE_MARGIN * 2} fill="none" stroke="#ffffff" strokeOpacity={0.22} strokeDasharray="10 8" strokeWidth={1 / scale} />
                 </g>
               ) : null}
-              {guides.x !== null ? <line x1={guides.x} y1={0} x2={guides.x} y2={THUMB_H} stroke="#ff4fd8" strokeWidth={1.5 / scale} pointerEvents="none" /> : null}
-              {guides.y !== null ? <line x1={0} y1={guides.y} x2={THUMB_W} y2={guides.y} stroke="#ff4fd8" strokeWidth={1.5 / scale} pointerEvents="none" /> : null}
+              {issueOverlay}
+              {guides.x !== null ? <line x1={guides.x} y1={0} x2={guides.x} y2={THUMB_H} stroke="var(--accent)" strokeWidth={1 / scale} pointerEvents="none" /> : null}
+              {guides.y !== null ? <line x1={0} y1={guides.y} x2={THUMB_W} y2={guides.y} stroke="var(--accent)" strokeWidth={1 / scale} pointerEvents="none" /> : null}
               {selectionOverlay}
             </svg>
           </div>
         </div>
 
+        <Splitter label="Resize the properties panel" side="right" value={rightW} min={260} max={520} onChange={setRightW} onDone={saveRightW} />
+
         <section className="win props">
           <div className="titlebar">
-            <Icon name="settings" /> {selected ? selected.name.toUpperCase() : "PROPERTIES"}
+            <Icon name="settings" /> {selected ? selected.name : "Properties"}
           </div>
           <div className="content" style={{ overflow: "auto" }}>
-            {selected ? <Properties layer={selected} patch={patch} textRef={textRef} onReplaceImage={async () => {
-              const path = await platform.dialogs.openFile("Replace image", [{ name: "Images", extensions: ["png", "jpg", "jpeg", "gif", "webp", "bmp"] }]);
-              if (!path || selected.type !== "image") return;
-              const b64 = await platform.files.readBinary(path);
-              const src = `data:${mimeForPath(path)};base64,${b64}`;
-              const size = await imageSize(src);
-              patch(selected.id, { src, naturalW: size.w, naturalH: size.h, crop: { x: 0, y: 0, w: 1, h: 1 }, h: Math.round(selected.w * (size.h / size.w)) } as Partial<ImageLayer>);
-            }} /> : <p className="dim small">Click a layer on the canvas or in the layer list. Alt-drag moves without snapping; Shift keeps proportions and snaps rotation to 15°.</p>}
             <div className="groupbox">
-              <legend>Preview at real sizes</legend>
+              <legend>
+                Checks {issues.length ? `(${errors ? `${errors} to fix, ` : ""}${issues.length - errors} to look at)` : ""}
+              </legend>
+              {issues.length ? (
+                <div className="issues">
+                  {issues.map((i, k) => (
+                    <button key={k} className={`issue-row ${i.level}`} onClick={() => setSel(i.layerIds[0] ?? null)}>
+                      <i />
+                      <span>{i.message}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <p className="small dim">Nothing overlaps, everything is inside the frame and readable on a phone.</p>
+              )}
+            </div>
+            {selected ? (
+              <Properties
+                layer={selected}
+                patch={patch}
+                textRef={textRef}
+                onAlign={(how) => commit(alignLayers(doc, selected.id, how, SAFE_MARGIN))}
+                onReplaceImage={async () => {
+                  const path = await platform.dialogs.openFile("Replace image", [{ name: "Images", extensions: ["png", "jpg", "jpeg", "gif", "webp", "bmp"] }]);
+                  if (!path || selected.type !== "image") return;
+                  const b64 = await platform.files.readBinary(path);
+                  const src = `data:${mimeForPath(path)};base64,${b64}`;
+                  const size = await imageSize(src);
+                  patch(selected.id, { src, naturalW: size.w, naturalH: size.h, crop: { x: 0, y: 0, w: 1, h: 1 }, alphaBox: null, h: Math.round(selected.w * (size.h / size.w)) } as Partial<ImageLayer>);
+                }}
+              />
+            ) : (
+              <p className="dim small">Click a layer on the canvas or in the list. Grouped layers (like the error box) move together. Alt-drag moves without snapping; Shift keeps proportions and snaps rotation to 15°.</p>
+            )}
+            <div className="groupbox">
+              <legend>Real sizes</legend>
               <div className="mini-previews">
                 {[
-                  { w: 168, label: "Phone list" },
-                  { w: 246, label: "Phone feed" },
+                  { w: 168, label: "Phone search / Up next" },
+                  { w: 246, label: "Phone feed (small)" },
                 ].map((s) => (
                   <figure key={s.w}>
-                    <div style={{ position: "relative", width: s.w, height: (s.w * 9) / 16 }} dangerouslySetInnerHTML={{ __html: docToSvg(doc, { width: s.w, height: (s.w * 9) / 16 }) }} />
+                    <div style={{ position: "relative", width: s.w, height: (s.w * 9) / 16, borderRadius: 6, overflow: "hidden" }} dangerouslySetInnerHTML={{ __html: docToSvg(doc, { width: s.w, height: (s.w * 9) / 16 }) }} />
                     <figcaption>{s.label}</figcaption>
                   </figure>
                 ))}
@@ -628,34 +753,42 @@ export function Editor(props: EditorProps) {
         </section>
       </div>
 
+      {ytDlg ? <YouTubePreview doc={doc} title={props.videoTitle || doc.name} onClose={() => setYtDlg(false)} /> : null}
+
       {exportDlg ? (
         <Dialog title="Export thumbnail" icon="export" onClose={() => setExportDlg(false)} actions={<Button onClick={() => setExportDlg(false)}>Done</Button>}>
           <div className="stack">
+            {errors ? <Note kind="err">{errors} problem{errors === 1 ? "" : "s"} still marked (see Checks). You can export anyway.</Note> : null}
             <div className="row nowrap">
               <Button variant="primary" disabled={busy} onClick={() => void exportFile("png")}>
                 PNG
               </Button>
-              <span className="small">1280x720 flat image for YouTube. Not editable as layers.</span>
+              <span className="small">1280×720 image to upload to YouTube.</span>
+            </div>
+            <div className="row nowrap">
+              <Button disabled={busy} onClick={() => void exportFile("psd")}>
+                PSD (layers)
+              </Button>
+              <span className="small">Opens in Affinity Photo, Photoshop, GIMP and Krita with every layer separate and named. Text arrives as pixels; keep the .cthumb to change the wording later.</span>
             </div>
             <div className="row nowrap">
               <Button disabled={busy} onClick={() => void exportFile("svg")}>
                 SVG
               </Button>
-              <span className="small">Every layer is a separate group with live text. Opens editable in Inkscape and browsers; Krita imports it as a vector layer.</span>
+              <span className="small">Vector with live text, for Inkscape or Affinity Designer. Uses the bundled fonts, so install them (they're in the app's fonts folder) for exact lettering.</span>
             </div>
             <div className="row nowrap">
               <Button disabled={busy} onClick={() => void exportFile("ora")}>
-                OpenRaster (.ora)
+                OpenRaster
               </Button>
-              <span className="small">One pixel layer per layer, with names, order, opacity and visibility. Opens in Krita, GIMP and MyPaint. Text becomes pixels in this format.</span>
+              <span className="small">Layers for Krita, GIMP and MyPaint.</span>
             </div>
             <div className="row nowrap">
               <Button disabled={busy} onClick={() => void exportFile("cthumb")}>
-                .cthumb project
+                .cthumb
               </Button>
-              <span className="small">The native, fully editable file. Re-open it in Thumbnail Lab on any PC.</span>
+              <span className="small">The fully editable file, to reopen here on any PC.</span>
             </div>
-            <Note>Canva: there is no supported Canva integration yet. Uploading the PNG to Canva gives one flat image; layers do not survive that route.</Note>
           </div>
         </Dialog>
       ) : null}
@@ -667,67 +800,123 @@ export function Editor(props: EditorProps) {
   }
 }
 
-function Properties(p: { layer: Layer; patch: (id: string, p: Partial<Layer>, key?: string) => void; textRef: RefObject<HTMLTextAreaElement | null>; onReplaceImage: () => Promise<void> }) {
+/** The thumbnail where people will see it: YouTube's home feed (dark and light) and the Up next list. */
+function YouTubePreview({ doc, title, onClose }: { doc: ThumbnailDoc; title: string; onClose: () => void }) {
+  const svg = docToSvg(doc);
+  const yours = (w?: number) => (
+    <div className="yt-card" style={w ? { width: w } : undefined}>
+      <div className="yt-img">
+        <div dangerouslySetInnerHTML={{ __html: svg }} />
+        <span className="dur">14:07</span>
+      </div>
+      <div className="yt-meta">
+        <span className="yt-avatar" />
+        <div>
+          <div className="yt-title">{title}</div>
+          <div className="yt-sub">Tamster · 1 day ago</div>
+        </div>
+      </div>
+    </div>
+  );
+  const other = (k: number) => (
+    <div key={k} className="yt-card other">
+      <div className="yt-img" />
+      <div className="yt-meta">
+        <span className="yt-avatar" />
+        <div className="stack tight">
+          <div className="yt-title">placeholder video title</div>
+          <div className="yt-sub">channel</div>
+        </div>
+      </div>
+    </div>
+  );
+  return (
+    <Dialog title="Preview on YouTube" icon="play" wide onClose={onClose} actions={<Button onClick={onClose}>Close</Button>}>
+      <div className="yt-previews">
+        <span className="label">Home feed, dark (cards are about this size at 1440p)</span>
+        <div className="yt-feed">
+          {other(1)}
+          {yours()}
+          {other(2)}
+        </div>
+        <span className="label">Home feed, light</span>
+        <div className="yt-feed light">
+          {other(3)}
+          {other(4)}
+          {yours()}
+        </div>
+        <span className="label">Up next / phone search (168 px wide)</span>
+        <div className="yt-list">
+          <div className="yt-img">
+            <div dangerouslySetInnerHTML={{ __html: svg }} />
+          </div>
+          <div className="yt-card">
+            <div className="yt-title">{title}</div>
+            <div className="yt-sub">Tamster</div>
+          </div>
+        </div>
+        <p className="dim small">Grey cards stand in for other videos; nothing here is fetched from YouTube.</p>
+      </div>
+    </Dialog>
+  );
+}
+
+function Properties(p: { layer: Layer; patch: (id: string, p: Partial<Layer>, key?: string) => void; textRef: RefObject<HTMLTextAreaElement | null>; onReplaceImage: () => Promise<void>; onAlign: (how: Align) => void }) {
   const l = p.layer;
   const set = (patch: Partial<Layer>, key?: string) => p.patch(l.id, patch, key);
   return (
     <div className="stack">
-      <label className="field">
-        <span className="label">Layer name</span>
-        <input className="input" value={l.name} onChange={(e) => set({ name: e.target.value }, `${l.id}:name`)} />
-      </label>
       {l.type !== "background" ? (
-        <div className="grid cols-2">
-          <NumberField label="X" value={l.x} onChange={(v) => set({ x: v })} />
-          <NumberField label="Y" value={l.y} onChange={(v) => set({ y: v })} />
-          {l.type !== "text" ? (
-            <>
-              <NumberField label="Width" value={l.w} min={8} onChange={(v) => set({ w: Math.max(8, v) })} />
-              <NumberField label="Height" value={l.h} min={8} onChange={(v) => set({ h: Math.max(8, v) })} />
-            </>
-          ) : null}
-          <NumberField label="Rotation" value={l.rotation} step={1} onChange={(v) => set({ rotation: v })} />
+        <div className="align-row" role="group" aria-label="Align to the thumbnail">
+          <Button size="small" icon="alignL" title="Align left (inside the safe margin)" onClick={() => p.onAlign("left")} />
+          <Button size="small" icon="alignC" title="Centre horizontally" onClick={() => p.onAlign("center")} />
+          <Button size="small" icon="alignR" title="Align right" onClick={() => p.onAlign("right")} />
+          <Button size="small" icon="alignT" title="Align top" onClick={() => p.onAlign("top")} />
+          <Button size="small" icon="alignM" title="Centre vertically" onClick={() => p.onAlign("middle")} />
+          <Button size="small" icon="alignB" title="Align bottom" onClick={() => p.onAlign("bottom")} />
         </div>
       ) : null}
-      <Slider label="Opacity" value={l.opacity * 100} min={0} max={100} onChange={(v) => set({ opacity: v / 100 })} format={(v) => `${Math.round(v)}%`} />
 
       {l.type === "text" ? (
         <>
           <label className="field">
-            <span className="label">Text (Enter for new line)</span>
+            <span className="label">Text (Enter for a new line)</span>
             <textarea ref={p.textRef} className="textarea" rows={3} value={l.text} onChange={(e) => set({ text: e.target.value } as Partial<TextLayer>, `${l.id}:text`)} />
           </label>
           <label className="field">
             <span className="label">Font</span>
-            <Select value={l.fontFamily} options={FONTS} onChange={(v) => set({ fontFamily: v } as Partial<TextLayer>)} />
+            <Select value={l.fontFamily} options={FONTS} onChange={(v) => set({ fontFamily: v, fontWeight: FONT_METRICS[v]?.weight ?? l.fontWeight } as Partial<TextLayer>)} />
           </label>
           <div className="grid cols-2">
             <NumberField label="Size" value={l.fontSize} min={8} onChange={(v) => set({ fontSize: Math.max(8, v) } as Partial<TextLayer>)} />
-            <NumberField label="Letter spacing" value={l.letterSpacing} onChange={(v) => set({ letterSpacing: v } as Partial<TextLayer>)} />
             <NumberField label="Line height" value={l.lineHeight} step={0.05} onChange={(v) => set({ lineHeight: Math.max(0.6, v) } as Partial<TextLayer>)} />
+            <NumberField label="Letter spacing" value={l.letterSpacing} onChange={(v) => set({ letterSpacing: v } as Partial<TextLayer>)} />
+            <NumberField label="Rotation" value={l.rotation} onChange={(v) => set({ rotation: v })} />
           </div>
           <div className="row">
-            <Check checked={l.fontWeight >= 700} onChange={(v) => set({ fontWeight: v ? 700 : 400 } as Partial<TextLayer>)}>
-              Bold
+            <Check checked={l.uppercase} onChange={(v) => set({ uppercase: v } as Partial<TextLayer>)}>
+              CAPS
             </Check>
             <Check checked={l.italic} onChange={(v) => set({ italic: v } as Partial<TextLayer>)}>
               Italic
-            </Check>
-            <Check checked={l.uppercase} onChange={(v) => set({ uppercase: v } as Partial<TextLayer>)}>
-              CAPS
             </Check>
           </div>
           <Segmented
             value={l.align}
             options={[
               { id: "start", label: "Left" },
-              { id: "middle", label: "Center" },
+              { id: "middle", label: "Centre" },
               { id: "end", label: "Right" },
             ]}
             onChange={(v) => v && set({ align: v } as Partial<TextLayer>)}
             label="Alignment"
           />
-          <ColorField label="Text color" value={l.color} onChange={(v) => set({ color: v } as Partial<TextLayer>, `${l.id}:color`)} />
+          <ColorField label="Colour" value={l.color} onChange={(v) => set({ color: v } as Partial<TextLayer>, `${l.id}:color`)} />
+          <Check checked={!!l.fill2} onChange={(v) => set({ fill2: v ? "#ff9b1a" : null } as Partial<TextLayer>)}>
+            Gradient (top to bottom)
+          </Check>
+          {l.fill2 ? <ColorField label="Bottom colour" value={l.fill2} onChange={(v) => set({ fill2: v } as Partial<TextLayer>, `${l.id}:fill2`)} /> : null}
+          {!l.text.includes("\n") ? <Slider label="Bend" value={l.arch ?? 0} min={-60} max={60} onChange={(v) => set({ arch: v } as Partial<TextLayer>, `${l.id}:arch`)} format={(v) => `${Math.round(v)}°`} /> : null}
         </>
       ) : null}
 
@@ -735,20 +924,16 @@ function Properties(p: { layer: Layer; patch: (id: string, p: Partial<Layer>, ke
         <>
           <label className="field">
             <span className="label">Shape</span>
-            <Select
-              value={l.shape}
-              options={[
-                { id: "rect", label: "Rectangle" },
-                { id: "ellipse", label: "Ellipse" },
-                { id: "triangle", label: "Triangle" },
-                { id: "arrow", label: "Arrow" },
-                { id: "star", label: "Starburst" },
-              ]}
-              onChange={(v) => set({ shape: v } as Partial<ShapeLayer>)}
-            />
+            <Select value={l.shape} options={SHAPES} onChange={(v) => set({ shape: v } as Partial<ShapeLayer>)} />
           </label>
-          <ColorField label="Fill (use 'none' for outline only)" value={l.fill} onChange={(v) => set({ fill: v } as Partial<ShapeLayer>, `${l.id}:fill`)} />
+          <ColorField label="Fill ('none' for outline only)" value={l.fill} onChange={(v) => set({ fill: v } as Partial<ShapeLayer>, `${l.id}:fill`)} />
+          {l.shape === "curved-arrow" || l.shape === "arrow" ? (
+            <Check checked={!!l.mirror} onChange={(v) => set({ mirror: v } as Partial<ShapeLayer>)}>
+              Point the other way
+            </Check>
+          ) : null}
           {l.shape === "rect" ? <Slider label="Corner radius" value={l.radius} min={0} max={Math.min(l.w, l.h) / 2} onChange={(v) => set({ radius: v } as Partial<ShapeLayer>)} /> : null}
+          <NumberField label="Rotation" value={l.rotation} onChange={(v) => set({ rotation: v })} />
         </>
       ) : null}
 
@@ -764,8 +949,8 @@ function Properties(p: { layer: Layer; patch: (id: string, p: Partial<Layer>, ke
             onChange={(v) => v && set({ fill: { ...l.fill, kind: v } } as Partial<BackgroundLayer>)}
             label="Fill type"
           />
-          <ColorField label="Color 1" value={l.fill.colors[0]} onChange={(v) => set({ fill: { ...l.fill, colors: [v, l.fill.colors[1]] } } as Partial<BackgroundLayer>, `${l.id}:c1`)} />
-          {l.fill.kind !== "solid" ? <ColorField label="Color 2" value={l.fill.colors[1]} onChange={(v) => set({ fill: { ...l.fill, colors: [l.fill.colors[0], v] } } as Partial<BackgroundLayer>, `${l.id}:c2`)} /> : null}
+          <ColorField label="Colour 1" value={l.fill.colors[0]} onChange={(v) => set({ fill: { ...l.fill, colors: [v, l.fill.colors[1]] } } as Partial<BackgroundLayer>, `${l.id}:c1`)} />
+          {l.fill.kind !== "solid" ? <ColorField label="Colour 2" value={l.fill.colors[1]} onChange={(v) => set({ fill: { ...l.fill, colors: [l.fill.colors[0], v] } } as Partial<BackgroundLayer>, `${l.id}:c2`)} /> : null}
           {l.fill.kind === "linear" ? <Slider label="Angle" value={l.fill.angle} min={0} max={360} onChange={(v) => set({ fill: { ...l.fill, angle: v } } as Partial<BackgroundLayer>)} /> : null}
         </>
       ) : null}
@@ -774,18 +959,32 @@ function Properties(p: { layer: Layer; patch: (id: string, p: Partial<Layer>, ke
         <>
           <div className="row">
             <Button size="small" onClick={() => void p.onReplaceImage()}>
-              Replace image...
+              Replace image…
             </Button>
             <Check checked={l.flipX} onChange={(v) => set({ flipX: v } as Partial<ImageLayer>)}>
-              Flip
+              Mirror
             </Check>
+          </div>
+          <div className="groupbox">
+            <legend>Look</legend>
+            <Slider label="Brightness" value={(l.adjust?.brightness ?? 1) * 100} min={40} max={160} onChange={(v) => set({ adjust: { brightness: v / 100, saturate: l.adjust?.saturate ?? 1 } } as Partial<ImageLayer>, `${l.id}:bright`)} format={(v) => `${Math.round(v)}%`} />
+            <Slider label="Colour" value={(l.adjust?.saturate ?? 1) * 100} min={0} max={200} onChange={(v) => set({ adjust: { brightness: l.adjust?.brightness ?? 1, saturate: v / 100 } } as Partial<ImageLayer>, `${l.id}:sat`)} format={(v) => `${Math.round(v)}%`} />
+            <Check checked={!!l.outline} onChange={(v) => set({ outline: v ? { color: "#ffffff", width: 7 } : null } as Partial<ImageLayer>)}>
+              Sticker outline (follows the cut-out)
+            </Check>
+            {l.outline ? (
+              <>
+                <ColorField label="Outline colour" value={l.outline.color} onChange={(v) => set({ outline: { ...(l.outline ?? { width: 7 }), color: v } } as Partial<ImageLayer>, `${l.id}:olc`)} />
+                <Slider label="Outline width" value={l.outline.width} min={1} max={24} onChange={(v) => set({ outline: { ...(l.outline ?? { color: "#fff" }), width: v } } as Partial<ImageLayer>, `${l.id}:olw`)} />
+              </>
+            ) : null}
           </div>
           <div className="groupbox">
             <legend>Crop</legend>
             <Slider label="Left" value={l.crop.x * 100} min={0} max={95} onChange={(v) => set({ crop: { ...l.crop, x: v / 100, w: Math.min(l.crop.w, 1 - v / 100) } } as Partial<ImageLayer>, `${l.id}:crop`)} format={(v) => `${Math.round(v)}%`} />
             <Slider label="Top" value={l.crop.y * 100} min={0} max={95} onChange={(v) => set({ crop: { ...l.crop, y: v / 100, h: Math.min(l.crop.h, 1 - v / 100) } } as Partial<ImageLayer>, `${l.id}:crop`)} format={(v) => `${Math.round(v)}%`} />
-            <Slider label="Width" value={l.crop.w * 100} min={5} max={(1 - l.crop.x) * 100} onChange={(v) => set({ crop: { ...l.crop, w: v / 100 }, h: Math.round((l.w * ((l.crop.h * l.naturalH) / ((v / 100) * l.naturalW)))) } as Partial<ImageLayer>, `${l.id}:crop`)} format={(v) => `${Math.round(v)}%`} />
-            <Slider label="Height" value={l.crop.h * 100} min={5} max={(1 - l.crop.y) * 100} onChange={(v) => set({ crop: { ...l.crop, h: v / 100 }, h: Math.round((l.w * (((v / 100) * l.naturalH) / (l.crop.w * l.naturalW)))) } as Partial<ImageLayer>, `${l.id}:crop`)} format={(v) => `${Math.round(v)}%`} />
+            <Slider label="Width" value={l.crop.w * 100} min={5} max={(1 - l.crop.x) * 100} onChange={(v) => set({ crop: { ...l.crop, w: v / 100 }, h: Math.round(l.w * ((l.crop.h * l.naturalH) / ((v / 100) * l.naturalW))) } as Partial<ImageLayer>, `${l.id}:crop`)} format={(v) => `${Math.round(v)}%`} />
+            <Slider label="Height" value={l.crop.h * 100} min={5} max={(1 - l.crop.y) * 100} onChange={(v) => set({ crop: { ...l.crop, h: v / 100 }, h: Math.round(l.w * (((v / 100) * l.naturalH) / (l.crop.w * l.naturalW))) } as Partial<ImageLayer>, `${l.id}:crop`)} format={(v) => `${Math.round(v)}%`} />
             <Button size="small" variant="flat" onClick={() => set({ crop: { x: 0, y: 0, w: 1, h: 1 }, h: Math.round(l.w * (l.naturalH / l.naturalW)) } as Partial<ImageLayer>)}>
               Reset crop
             </Button>
@@ -795,35 +994,54 @@ function Properties(p: { layer: Layer; patch: (id: string, p: Partial<Layer>, ke
 
       {l.type !== "background" ? (
         <>
-          <div className="groupbox">
-            <legend>Outline</legend>
-            <Check checked={!!l.stroke} onChange={(v) => set({ stroke: v ? { color: "#000000", width: 6 } : null })}>
-              Enabled
-            </Check>
-            {l.stroke ? (
-              <>
-                <ColorField label="Color" value={l.stroke.color} onChange={(v) => set({ stroke: { ...(l.stroke ?? { width: 6 }), color: v } }, `${l.id}:stroke`)} />
-                <Slider label="Thickness" value={l.stroke.width} min={0} max={40} onChange={(v) => set({ stroke: { ...(l.stroke ?? { color: "#000" }), width: v } }, `${l.id}:strokew`)} />
-              </>
-            ) : null}
-          </div>
+          <Slider label="Opacity" value={l.opacity * 100} min={0} max={100} onChange={(v) => set({ opacity: v / 100 }, `${l.id}:op`)} format={(v) => `${Math.round(v)}%`} />
+          {l.type !== "image" ? (
+            <div className="groupbox">
+              <legend>Outline</legend>
+              <Check checked={!!l.stroke} onChange={(v) => set({ stroke: v ? { color: "#000000", width: l.type === "text" ? Math.round(l.fontSize * 0.09) : 6 } : null })}>
+                On
+              </Check>
+              {l.stroke ? (
+                <>
+                  <ColorField label="Colour" value={l.stroke.color} onChange={(v) => set({ stroke: { ...(l.stroke ?? { width: 6 }), color: v } }, `${l.id}:stroke`)} />
+                  <Slider label="Thickness" value={l.stroke.width} min={0} max={40} onChange={(v) => set({ stroke: { ...(l.stroke ?? { color: "#000" }), width: v } }, `${l.id}:strokew`)} />
+                </>
+              ) : null}
+            </div>
+          ) : null}
           <div className="groupbox">
             <legend>Shadow</legend>
             <Check checked={!!l.shadow} onChange={(v) => set({ shadow: v ? { color: "#000000", blur: 16, dx: 0, dy: 8, opacity: 0.6 } : null })}>
-              Enabled
+              On
             </Check>
             {l.shadow ? (
               <>
-                <ColorField label="Color" value={l.shadow.color} onChange={(v) => set({ shadow: { ...l.shadow!, color: v } }, `${l.id}:shc`)} />
                 <Slider label="Blur" value={l.shadow.blur} min={0} max={80} onChange={(v) => set({ shadow: { ...l.shadow!, blur: v } }, `${l.id}:shb`)} />
-                <Slider label="Offset X" value={l.shadow.dx} min={-60} max={60} onChange={(v) => set({ shadow: { ...l.shadow!, dx: v } }, `${l.id}:shx`)} />
-                <Slider label="Offset Y" value={l.shadow.dy} min={-60} max={60} onChange={(v) => set({ shadow: { ...l.shadow!, dy: v } }, `${l.id}:shy`)} />
+                <Slider label="Drop" value={l.shadow.dy} min={-40} max={40} onChange={(v) => set({ shadow: { ...l.shadow!, dy: v } }, `${l.id}:shy`)} />
                 <Slider label="Strength" value={l.shadow.opacity * 100} min={0} max={100} onChange={(v) => set({ shadow: { ...l.shadow!, opacity: v / 100 } }, `${l.id}:sho`)} format={(v) => `${Math.round(v)}%`} />
               </>
             ) : null}
           </div>
+          <div className="grid cols-2">
+            <NumberField label="X" value={l.x} onChange={(v) => set({ x: v })} />
+            <NumberField label="Y" value={l.y} onChange={(v) => set({ y: v })} />
+            {l.type !== "text" ? (
+              <>
+                <NumberField label="Width" value={l.w} min={8} onChange={(v) => set({ w: Math.max(8, v) })} />
+                <NumberField label="Height" value={l.h} min={8} onChange={(v) => set({ h: Math.max(8, v) })} />
+              </>
+            ) : null}
+          </div>
+          <label className="field">
+            <span className="label">This layer is…</span>
+            <Select<LayerRole | ""> value={l.role ?? ""} options={ROLES} onChange={(v) => set({ role: v || undefined })} />
+          </label>
         </>
       ) : null}
+      <label className="field">
+        <span className="label">Layer name</span>
+        <input className="input" value={l.name} onChange={(e) => set({ name: e.target.value }, `${l.id}:name`)} />
+      </label>
     </div>
   );
 }

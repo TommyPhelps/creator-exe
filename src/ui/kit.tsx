@@ -1,4 +1,4 @@
-// Classic beveled UI primitives.
+// Interface primitives (0.2.0: flat, square, near-black).
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { Icon } from "./icons.tsx";
 import type { Level as LevelValue } from "../domain/ideas/generator.ts";
@@ -301,4 +301,65 @@ export function PageHead(p: { sys: string; title: string; lede?: ReactNode; acti
       {p.actions ? <div className="row">{p.actions}</div> : null}
     </header>
   );
+}
+
+/**
+ * A drag handle between two panes. Reports the new size of the pane on its
+ * left (or right, with `side="right"`), clamped to min/max.
+ */
+export function Splitter(p: { value: number; onChange: (v: number) => void; onDone?: (v: number) => void; min: number; max: number; side?: "left" | "right"; label: string }) {
+  const [drag, setDrag] = useState<{ x: number; v: number } | null>(null);
+  const last = useRef(p.value);
+  return (
+    <div
+      className={`splitter ${drag ? "dragging" : ""}`}
+      role="separator"
+      aria-orientation="vertical"
+      aria-label={p.label}
+      aria-valuenow={Math.round(p.value)}
+      tabIndex={0}
+      onPointerDown={(e) => {
+        (e.currentTarget as Element).setPointerCapture(e.pointerId);
+        setDrag({ x: e.clientX, v: p.value });
+      }}
+      onPointerMove={(e) => {
+        if (!drag) return;
+        const dx = (e.clientX - drag.x) * (p.side === "right" ? -1 : 1);
+        last.current = Math.max(p.min, Math.min(p.max, drag.v + dx));
+        p.onChange(last.current);
+      }}
+      onPointerUp={() => {
+        if (drag) p.onDone?.(last.current);
+        setDrag(null);
+      }}
+      onDoubleClick={() => p.onDone?.(p.value)}
+      onKeyDown={(e) => {
+        if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+        const dir = (e.key === "ArrowRight" ? 1 : -1) * (p.side === "right" ? -1 : 1);
+        const v = Math.max(p.min, Math.min(p.max, p.value + dir * 16));
+        p.onChange(v);
+        p.onDone?.(v);
+      }}
+    />
+  );
+}
+
+/** A pane width remembered on this PC (per screen), for resizable layouts. */
+export function usePaneWidth(key: string, initial: number): [number, (v: number) => void, (v: number) => void] {
+  const [w, setW] = useState(() => {
+    try {
+      const v = Number(window.localStorage.getItem(`pane:${key}`));
+      return Number.isFinite(v) && v > 0 ? v : initial;
+    } catch {
+      return initial;
+    }
+  });
+  const save = (v: number) => {
+    try {
+      window.localStorage.setItem(`pane:${key}`, String(Math.round(v)));
+    } catch {
+      /* storage unavailable: the width just isn't remembered */
+    }
+  };
+  return [w, setW, save];
 }

@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { Ctx, type AppCtx, type ConfirmOptions, type Route, type SectionId, type ToastMsg } from "./context.tsx";
 import type { Platform } from "../platform/types.ts";
 import { DEFAULT_SETTINGS, THEMES, saveSettings, type AppSettings, type Density } from "../domain/settings.ts";
 import { AppMark, Icon } from "../ui/icons.tsx";
-import { Button, Dialog } from "../ui/kit.tsx";
+import { Button, Dialog, Splitter } from "../ui/kit.tsx";
 import { QuickCapture } from "../features/QuickCapture.tsx";
 import { ControlRoom } from "../features/ControlRoom.tsx";
 import { Tonight } from "../features/Tonight.tsx";
@@ -134,6 +134,7 @@ const SHORTCUTS: [string, string][] = [
 export function App(props: { platform: Platform; initialSettings: AppSettings; appVersion: string; bootNotes: string[] }) {
   const { platform, appVersion } = props;
   const [settings, setSettings] = useState(props.initialSettings);
+  const [navW, setNavW] = useState(props.initialSettings.navWidth);
   const [route, setRoute] = useState<Route>({ section: "control" });
   const [version, setVersion] = useState(0);
   const [toasts, setToasts] = useState<ToastMsg[]>([]);
@@ -355,7 +356,7 @@ export function App(props: { platform: Platform; initialSettings: AppSettings; a
           </button>
         </div>
         <div className="body">
-          <nav className={`nav ${settings.navCollapsed ? "collapsed" : ""}`} aria-label="Sections">
+          <nav className={`nav ${settings.navCollapsed ? "collapsed" : ""}`} aria-label="Sections" style={settings.navCollapsed ? undefined : ({ "--nav-w": `${navW}px` } as CSSProperties)}>
             {groups.map((g) => (
               <div key={g} className="stack tight">
                 <div className="nav-group">{g}</div>
@@ -371,20 +372,25 @@ export function App(props: { platform: Platform; initialSettings: AppSettings; a
               </div>
             ))}
           </nav>
+          <Splitter
+            label="Resize the section list"
+            value={navW}
+            min={180}
+            max={420}
+            onChange={setNavW}
+            onDone={(v) => void updateSettings({ navWidth: Math.round(v) })}
+          />
           <main className="workspace">
             <Screen route={route} />
           </main>
         </div>
         <footer className="statusbar">
-          <span className="cell">
-            <span className="led" /> SYSTEM ONLINE
-          </span>
           <span className="cell grow">{statusLine(route)}</span>
           <span className="cell" title="All data is stored locally on this PC">
             {lastSaved ? `Saved ${new Date(lastSaved).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit", second: "2-digit" })}` : "Local database"}
           </span>
           <span className="cell" title="Phase 1 runs without AI. Local and cloud AI are planned for Phase 3.">
-            <span className="led off" /> AI: OFF
+            AI off
           </span>
           <span className="cell">v{appVersion}</span>
           <span className="cell">

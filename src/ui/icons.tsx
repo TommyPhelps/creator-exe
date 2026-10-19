@@ -3,7 +3,7 @@
 import type { ReactElement } from "react";
 
 const S = { fill: "none", stroke: "currentColor", strokeWidth: 1.6, strokeLinejoin: "round" as const, strokeLinecap: "round" as const };
-const A = { fill: "var(--accent)", stroke: "currentColor", strokeWidth: 1.2 };
+const A = { fill: "currentColor", fillOpacity: 0.16, stroke: "currentColor", strokeWidth: 1.2 };
 
 const ICONS: Record<string, ReactElement> = {
   control: (
@@ -188,6 +188,19 @@ const ICONS: Record<string, ReactElement> = {
       <path d="M3 12h18M12 3c2.8 3 2.8 15 0 18M12 3c-2.8 3-2.8 15 0 18" {...S} />
     </>
   ),
+  user: (
+    <g>
+      <circle cx="12" cy="8" r="4" {...A} />
+      <path d="M4.5 20.5c.8-4 3.8-6 7.5-6s6.7 2 7.5 6" {...S} />
+    </g>
+  ),
+  alignL: <path d="M4 3v18M8 7h10v4H8zM8 14h6v4H8z" {...S} />,
+  alignC: <path d="M12 3v18M6 7h12v4H6zM8.5 14h7v4h-7z" {...S} />,
+  alignR: <path d="M20 3v18M6 7h10v4H6zM10 14h6v4h-6z" {...S} />,
+  alignT: <path d="M3 4h18M7 8v10h4V8zM14 8v6h4V8z" {...S} />,
+  alignM: <path d="M3 12h18M7 6h4v12H7zM14 8.5h4v7h-4z" {...S} />,
+  alignB: <path d="M3 20h18M7 6v10h4V6zM14 10v6h4v-6z" {...S} />,
+  warn: <path d="M12 3.5L2.5 20h19zM12 10v4.5M12 17.2v.3" {...S} />,
   key: (
     <>
       <circle cx="8" cy="15" r="4.5" {...A} />
@@ -207,12 +220,10 @@ export function Icon({ name, title }: { name: string; title?: string }) {
 
 export function AppMark() {
   return (
-    <svg viewBox="0 0 256 256" aria-hidden>
-      <rect x="20" y="22" width="216" height="172" rx="18" fill="#4d6584" stroke="#0a0f18" strokeWidth="8" />
-      <rect x="40" y="44" width="176" height="128" rx="10" fill="#07111c" stroke="#0a0f18" strokeWidth="6" />
-      <polygon points="110,78 110,138 158,108" fill="var(--led)" />
-      <rect x="58" y="146" width="40" height="8" fill="var(--led)" />
-      <rect x="60" y="208" width="136" height="24" rx="6" fill="#4d6584" stroke="#0a0f18" strokeWidth="6" />
+    <svg viewBox="0 0 24 24" aria-hidden>
+      <rect x="2.5" y="4.5" width="19" height="13" fill="none" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M10 8.2v5.6l4.6-2.8z" fill="var(--accent)" />
+      <path d="M8 20.5h8" stroke="currentColor" strokeWidth="1.6" />
     </svg>
   );
 }

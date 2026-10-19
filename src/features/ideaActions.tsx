@@ -100,10 +100,20 @@ export function useGameInfo(name: string | null): GameInfo | null {
   return info;
 }
 
-function GameCover({ game }: { game: string | null }) {
+/** Every card gets the same header: store art when there is some, otherwise a plain panel with the game's name. */
+function GameCover({ game, fallback }: { game: string | null; fallback: string }) {
+  const { settings } = useApp();
   const info = useGameInfo(game);
   const [broken, setBroken] = useState(false);
-  if (!info || info.status !== "found" || !info.imageUrl || broken) return null;
+  if (!settings.ideaCovers) return null;
+  if (!info || info.status !== "found" || !info.imageUrl || broken) {
+    return (
+      <figure className="cover blank" aria-hidden>
+        <b>{game ?? fallback}</b>
+        {game ? null : <small>No game</small>}
+      </figure>
+    );
+  }
   return (
     <figure className="cover">
       <img src={info.imageUrl} alt={`${info.steamName ?? game} store image`} loading="lazy" onError={() => setBroken(true)} />
@@ -198,7 +208,7 @@ export function IdeaCard(props: {
 
   return (
     <article className={`card idea-card ${g.novelty ? "novel" : ""}`}>
-      {props.compact ? null : <GameCover game={named[0] ?? null} />}
+      {props.compact ? null : <GameCover game={named[0] ?? null} fallback={videoTypeLabel(g.videoType)} />}
       <div className="idea-meta">
         <span title="Content focus area">{DOMAIN_LABEL[g.domain]}</span>
         <span>·</span>

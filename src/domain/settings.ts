@@ -4,15 +4,23 @@ import { getSetting, setSetting } from "../db/repos.ts";
 import type { GeneratorControls } from "./ideas/generator.ts";
 import { DEFAULT_FOCUS, normalizeFocus, type ContentFocus } from "./ideas/focus.ts";
 
+/** 0.2.0: one near-black look; the theme only picks the accent colour. */
 export const THEMES = [
-  { id: "midnight-2003", label: "Midnight 2003" },
-  { id: "phosphor-green", label: "Phosphor Green" },
-  { id: "crt-amber", label: "CRT Amber" },
-  { id: "gothic-terminal", label: "Gothic Terminal" },
-  { id: "classic-dark", label: "Classic Windows Dark" },
-  { id: "monochrome-studio", label: "Monochrome Studio" },
+  { id: "ember", label: "Black / ember accent" },
+  { id: "ice", label: "Black / ice accent" },
+  { id: "rose", label: "Black / rose accent" },
+  { id: "mono", label: "Black / no colour" },
 ] as const;
 export type ThemeId = (typeof THEMES)[number]["id"];
+
+/** Themes from 0.1.x map onto the new accents so nobody lands on a missing theme. */
+export function normalizeTheme(v: unknown): ThemeId {
+  if (THEMES.some((t) => t.id === v)) return v as ThemeId;
+  if (v === "monochrome-studio" || v === "classic-dark") return "mono";
+  if (v === "gothic-terminal") return "rose";
+  if (v === "midnight-2003") return "ice";
+  return "ember";
+}
 export type Density = "compact" | "comfortable" | "spacious";
 
 export interface AppSettings {
@@ -36,6 +44,10 @@ export interface AppSettings {
   gameCovers: boolean;
   /** True once the v0.1.1 personal/channel interest split has run. */
   v011Upgraded: boolean;
+  /** 0.2.0: show cover art on idea cards (off gives every card the same plain header). */
+  ideaCovers: boolean;
+  /** 0.2.0: width of the section list, in pixels (drag its edge). */
+  navWidth: number;
 }
 
 export interface ChannelIdentity {
@@ -56,7 +68,7 @@ export const TAMSTER_IDENTITY: ChannelIdentity = {
 };
 
 export const DEFAULT_SETTINGS: AppSettings = {
-  theme: "midnight-2003",
+  theme: "ember",
   density: "comfortable",
   textScale: 1,
   channelInput: "UCGnpORs6LGRRb1b7y39wumw",
@@ -71,6 +83,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   contentFocus: DEFAULT_FOCUS,
   gameCovers: true,
   v011Upgraded: false,
+  ideaCovers: true,
+  navWidth: 236,
 };
 
 export const SECRET_YOUTUBE_KEY = "youtube_api_key";
@@ -80,6 +94,8 @@ export async function loadSettings(db: Db): Promise<AppSettings> {
   return {
     ...DEFAULT_SETTINGS,
     ...stored,
+    theme: normalizeTheme(stored.theme),
+    navWidth: Math.max(180, Math.min(420, Number(stored.navWidth) || DEFAULT_SETTINGS.navWidth)),
     channelIdentity: { ...TAMSTER_IDENTITY, ...(stored.channelIdentity ?? {}) },
     generator: { ...(stored.generator ?? {}) },
     contentFocus: normalizeFocus(stored.contentFocus ?? DEFAULT_FOCUS),
