@@ -371,13 +371,17 @@ const BUILDERS: Record<StyleId, Builder> = {
   wordart: (input, v) => {
     const f = v.cut ? face(v.cut, v.side, 0.82) : null;
     const col = textColumn(f, v.side);
-    const fit = fitText(input.headline, { family: "Luckiest Guy", maxW: col.w * 0.92, maxH: H * 0.3, maxLines: 1, uppercase: true, strokeRatio: 0.1, maxSize: 160, minSize: 64 });
+    // One bent line when it can be big; otherwise two straight lines, still big.
+    const one = fitText(input.headline, { family: "Luckiest Guy", maxW: col.w * 0.92, maxH: H * 0.3, maxLines: 1, uppercase: true, strokeRatio: 0.1, maxSize: 170, minSize: 100 });
+    const fit = one ?? fitText(input.headline, { family: "Luckiest Guy", maxW: col.w * 0.92, maxH: H * 0.48, maxLines: 2, uppercase: true, strokeRatio: 0.1, maxSize: 170, minSize: 72, lineHeight: 1.0 });
     if (!fit) return null;
-    const t = caption(fit.lines[0] ?? "", fit, col.x + col.w / 2, M + 30, { family: "Luckiest Guy", align: "middle", color: "#fff35c" });
+    const t = caption(fit.lines.join("\n"), fit, col.x + col.w / 2, M + 30, { family: "Luckiest Guy", align: "middle", color: "#fff35c" });
     t.fill2 = "#ff7a1a";
     t.stroke = { color: "#3a0a52", width: Math.round(fit.size * 0.1) };
-    t.arch = 28;
-    t.h = Math.round(t.h + fit.size * 0.5);
+    if (one) {
+      t.arch = 28;
+      t.h = Math.round(t.h + fit.size * 0.5);
+    }
     t.rotation = v.side === "right" ? -5 : 5;
     const layers: Layer[] = [backdrop(v.bg, { saturate: 1.35 })];
     if (f) layers.push(f);

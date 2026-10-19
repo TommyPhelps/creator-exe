@@ -135,3 +135,20 @@ Run these on the installed app. Each maps to a success workflow in the brief.
 
 **Nothing regressed**
 1. The v0.1.2 checks still pass: recording sheet, starting an idea twice reopens it, playtime-aware ideas, feedback, the four steps, Tamster's description.
+
+## v0.2.0
+
+Thumbnail Lab, face cut-out, design system. Released only after Tommy approves sample thumbnails made from his own photos and screenshots.
+
+| Requirement | How it is checked |
+| --- | --- |
+| Three or more genuinely different concepts from real screenshots, his photo and his words | `tests/compose.test.ts`: distinct styles, each with a backdrop image and traceable to his uploads |
+| No title on a coloured rectangle | No screenshot → no concepts (test) |
+| No overlaps, nothing off-frame or under the timestamp | 12-seed sweep in `tests/compose.test.ts`; live `checkDoc` in the editor |
+| Nothing invented | Rules lists and split labels only from his words (test) |
+| "Inspired by" | Reference style comes first with its colour and side (test) |
+| Face cut-out on device, with consent | Rust `cutout` module: consent dialog → download → SHA-256 check; CI runs real inference with the bundled onnxruntime.dll |
+| Layered export for Affinity | `src/domain/thumbnails/psd.ts`; PSD structure test; files read back with Pillow and ImageMagick |
+| Old thumbnails keep working | v1 documents parse and render (test) |
+| Safe migration | Schema v6 is additive (`thumb_assets`), tested |
+| New aesthetic at 1440p | Screenshots at 2560×1440 |
