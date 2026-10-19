@@ -2,6 +2,7 @@
 //! launching external programs. All product logic lives in the TypeScript
 //! frontend; this layer stays small so it is easy to audit.
 
+pub mod cutout;
 pub mod db;
 pub mod files;
 pub mod secrets;
@@ -44,12 +45,18 @@ async fn db_select(
 }
 
 #[tauri::command]
-async fn db_batch(state: tauri::State<'_, AppState>, statements: Vec<db::Statement>) -> Result<u64, String> {
+async fn db_batch(
+    state: tauri::State<'_, AppState>,
+    statements: Vec<db::Statement>,
+) -> Result<u64, String> {
     state.db.batch(&statements)
 }
 
 #[tauri::command]
-async fn app_info(app: tauri::AppHandle, state: tauri::State<'_, AppState>) -> Result<AppInfo, String> {
+async fn app_info(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+) -> Result<AppInfo, String> {
     Ok(AppInfo {
         version: app.package_info().version.to_string(),
         data_dir: state.data_dir.display().to_string(),
@@ -64,8 +71,13 @@ async fn app_info(app: tauri::AppHandle, state: tauri::State<'_, AppState>) -> R
 }
 
 #[tauri::command]
-async fn create_project_folders(root: String, name: String, subfolders: Vec<String>) -> Result<String, String> {
-    files::create_project_folders(Path::new(&root), &name, &subfolders).map(|p| p.display().to_string())
+async fn create_project_folders(
+    root: String,
+    name: String,
+    subfolders: Vec<String>,
+) -> Result<String, String> {
+    files::create_project_folders(Path::new(&root), &name, &subfolders)
+        .map(|p| p.display().to_string())
 }
 
 #[tauri::command]
@@ -95,7 +107,11 @@ async fn path_exists(path: String) -> Result<bool, String> {
 
 /// Writes an automatic safety backup into the app-data `backups` folder.
 #[tauri::command]
-async fn write_safety_backup(state: tauri::State<'_, AppState>, name: String, contents: String) -> Result<String, String> {
+async fn write_safety_backup(
+    state: tauri::State<'_, AppState>,
+    name: String,
+    contents: String,
+) -> Result<String, String> {
     let dir = state.data_dir.join("backups");
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let file = dir.join(format!("{}.json", files::sanitize_name(&name)));
@@ -160,6 +176,35 @@ async fn launch_program(program: String, argument: Option<String>) -> Result<(),
     cmd.spawn().map(|_| ()).map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+async fn cutout_status(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+) -> Result<cutout::CutoutStatus, String> {
+    Ok(cutout::status(&app, &state.data_dir))
+}
+
+/// Downloads the face-cutout model. Only called after you agree in the Thumbnail Lab.
+#[tauri::command]
+async fn cutout_download_model(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+) -> Result<(), String> {
+    cutout::download(&app, &state.data_dir).await
+}
+
+#[tauri::command]
+async fn cutout_run(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+    rgba: String,
+) -> Result<String, String> {
+    let dir = state.data_dir.clone();
+    tauri::async_runtime::spawn_blocking(move || cutout::run(&app, &dir, &rgba))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -171,7 +216,10 @@ pub fn run() {
             std::fs::create_dir_all(&data_dir)?;
             let database = db::Database::open(&data_dir.join("creator.db"))
                 .map_err(|e| Box::<dyn std::error::Error>::from(e))?;
-            app.manage(AppState { db: database, data_dir });
+            app.manage(AppState {
+                db: database,
+                data_dir,
+            });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -190,7 +238,10 @@ pub fn run() {
             secret_get,
             secret_delete,
             reveal_folder,
-            launch_program
+            launch_program,
+            cutout_status,
+            cutout_download_model,
+            cutout_run
         ])
         .run(tauri::generate_context!())
         .expect("error while running CREATOR.EXE");

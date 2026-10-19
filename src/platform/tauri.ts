@@ -1,10 +1,11 @@
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { bytesToBase64 } from "../lib/base64.ts";
-import type { AppInfo, Db, ExecResult, HttpRequest, HttpResult, Platform, Statement } from "./types.ts";
+import type { AppInfo, CutoutStatus, Db, ExecResult, HttpRequest, HttpResult, Platform, Statement } from "./types.ts";
 
 const db: Db = {
   select: <T,>(sql: string, params: unknown[] = []) => invoke<T[]>("db_select", { sql, params }),
@@ -91,6 +92,18 @@ export const tauriPlatform: Platform = {
     get: (name) => invoke<string | null>("secret_get", { name }),
     set: (name, value) => invoke<void>("secret_set", { name, value }),
     remove: (name) => invoke<void>("secret_delete", { name }),
+  },
+  cutout: {
+    status: () => invoke<CutoutStatus>("cutout_status"),
+    async download(onProgress) {
+      const off = await listen<{ done: number; total: number }>("cutout-download", (e) => onProgress(e.payload.done, e.payload.total));
+      try {
+        await invoke<void>("cutout_download_model");
+      } finally {
+        off();
+      }
+    },
+    run: (rgba) => invoke<string>("cutout_run", { rgba }),
   },
   openUrl: (url) => openUrl(url),
   async onFileDrop(handler) {

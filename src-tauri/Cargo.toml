@@ -1,10 +1,10 @@
 [package]
 name = "creator-exe"
-version = "0.1.3"
+version = "0.2.0"
 description = "CREATOR.EXE - personal YouTube creative workstation"
 authors = ["Tommy Phelps"]
 edition = "2021"
-rust-version = "1.77"
+rust-version = "1.92"
 
 [lib]
 name = "creator_exe_lib"
@@ -22,6 +22,9 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 rusqlite = { version = "0.32", features = ["bundled"] }
 base64 = "0.22"
+sha2 = "0.10"
+# Face cutout runs on this PC. ONNX Runtime is loaded from the bundled onnxruntime.dll (MIT).
+ort = { version = "=2.0.0-rc.14", default-features = false, features = ["std", "load-dynamic", "api-31"] }
 
 [target.'cfg(windows)'.dependencies]
 keyring = { version = "3", features = ["windows-native"] }

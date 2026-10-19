@@ -7,3 +7,7 @@ src-tauri/gen/
 .env
 .env.*
 scratch/
+# Fetched at build time by scripts/fetch-onnxruntime.sh (pinned SHA-256)
+src-tauri/resources/onnxruntime.dll
+src-tauri/resources/ONNXRUNTIME-*.txt
+src-tauri/resources/.onnxruntime-version

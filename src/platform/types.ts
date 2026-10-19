@@ -40,6 +40,16 @@ export interface HttpRequest {
   timeoutMs?: number;
 }
 
+export interface CutoutStatus {
+  /** The 176 MB model has been downloaded and checked. */
+  modelReady: boolean;
+  /** ONNX Runtime ships with the installer; the portable .exe doesn't have it. */
+  runtimeReady: boolean;
+  modelBytes: number;
+  modelUrl: string;
+  modelPath: string;
+}
+
 export interface FileFilter {
   name: string;
   extensions: string[];
@@ -74,6 +84,14 @@ export interface Platform {
     get(name: string): Promise<string | null>;
     set(name: string, value: string): Promise<void>;
     remove(name: string): Promise<void>;
+  };
+  /** On-device face cutout (U²-Net human segmentation, run by ONNX Runtime on this PC). */
+  cutout: {
+    status(): Promise<CutoutStatus>;
+    /** Downloads the model once, after you agree. Progress is in bytes. */
+    download(onProgress: (done: number, total: number) => void): Promise<void>;
+    /** 320×320 RGBA pixels (base64) in, 320×320 mask (base64, one byte per pixel) out. */
+    run(rgba320: string): Promise<string>;
   };
   openUrl(url: string): Promise<void>;
   onFileDrop(handler: (paths: string[]) => void): Promise<() => void>;
