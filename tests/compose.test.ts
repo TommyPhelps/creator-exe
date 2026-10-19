@@ -120,3 +120,48 @@ test("a cut-out cropped at one side is mirrored so the cut edge sits on the canv
     }
   }
 });
+
+test("works without a facecam: at least three concepts from a screenshot and words alone, none needing your face", () => {
+  for (const headline of ["Only the journal's directions", "I can't leave my house", "Is there an ocean?", "LOST"]) {
+    const r = composeConcepts({ headline, backgrounds: [shot()], cutouts: [], seed: 4 });
+    assert.ok(r.concepts.length >= 3, `${headline}: ${r.concepts.map((c) => c.style.id)} ${r.notes.join(" ")}`);
+    for (const c of r.concepts) {
+      assert.ok(!c.doc.layers.some((l) => l.role === "face"), "no face layer");
+      assert.notEqual(c.style.needs.face, "required");
+      assert.deepEqual(checkDoc(c.doc).filter((i) => i.level === "error"), []);
+    }
+    assert.ok(r.concepts.some((c) => !c.style.experimental), "your own styles come first");
+  }
+});
+
+test("any image you import works: odd sizes, tiny or huge, portrait or ultrawide, and any cut-out shape", () => {
+  const sizes = [[320, 180], [1280, 720], [1920, 1080], [2560, 1440], [3440, 1440], [1080, 1920], [7680, 4320], [800, 800]] as const;
+  const cuts = [
+    { src: PNG, w: 900, h: 1000, alphaBox: { x: 0.15, y: 0.05, w: 0.7, h: 0.95 } },
+    { src: PNG, w: 300, h: 1200, alphaBox: { x: 0.3, y: 0.02, w: 0.4, h: 0.98 } },
+    { src: PNG, w: 1600, h: 900, alphaBox: { x: 0, y: 0.1, w: 0.55, h: 0.9 } },
+    { src: PNG, w: 400, h: 400, alphaBox: { x: 0.4, y: 0.4, w: 0.2, h: 0.2 } },
+  ];
+  const heads = ["A", "Supercalifragilisticexpialidocious", "Why does Fargoth have 3,000 gold?", "Ñandú y café: día 1", "I tried every single ending in one sitting and it broke me completely"];
+  let built = 0;
+  for (const [w, h] of sizes) {
+    for (const c of cuts) {
+      for (const headline of heads) {
+        const r = composeConcepts({ headline, backgrounds: [shot(w, h)], cutouts: [c], lines: ["No wiki", "No markers", "No maps"], errorTitle: "Game.exe", seed: w + h, count: 6, experimental: true });
+        for (const k of r.concepts) {
+          built++;
+          assert.deepEqual(checkDoc(k.doc).filter((i) => i.level === "error"), [], `${w}x${h} ${headline} ${k.id}`);
+          for (const l of k.doc.layers) assert.ok([l.x, l.y, l.w, l.h].every(Number.isFinite), "finite geometry");
+        }
+      }
+    }
+  }
+  assert.ok(built > 300, `built ${built}`);
+});
+
+test("small images are flagged as soft instead of being passed off as sharp", () => {
+  const small = composeConcepts({ ...base, backgrounds: [shot(355, 199)] }).concepts[0]!;
+  assert.ok(checkDoc(small.doc).some((i) => i.code === "low-res" && /screenshot/i.test(i.message)));
+  const sharp = composeConcepts({ ...base, backgrounds: [shot(2560, 1440)], cutouts: [{ ...me, w: 1400, h: 1600 }] }).concepts[0]!;
+  assert.ok(!checkDoc(sharp.doc).some((i) => i.code === "low-res"));
+});

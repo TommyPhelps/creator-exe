@@ -279,9 +279,9 @@ const BUILDERS: Record<StyleId, Builder> = {
     return doc(input.headline, "reaction", [backdrop(v.bg), f, t]);
   },
   "reaction-arrow": (input, v) => {
-    if (!v.cut) return null;
-    const f = face(v.cut, v.side, 0.88);
-    const col = textColumn(f, v.side);
+    const f = v.cut ? face(v.cut, v.side, 0.88) : null;
+    // Without a face the caption takes the top and the arrow points into the game below it.
+    const col = f ? textColumn(f, v.side) : { x: M, w: W * 0.62 - M };
     const fit = fitText(input.headline, { family: "Lato", maxW: col.w, maxH: H * 0.42, maxLines: 3, uppercase: true, strokeRatio: 0.09, lineHeight: 1.02, maxSize: 140 });
     if (!fit) return null;
     const t = caption(fit.lines.join(" "), fit, v.side === "right" ? col.x : col.x + col.w, M, { family: "Lato", align: v.side === "right" ? "start" : "end", color: v.captionColor, lineHeight: 1.02 });
@@ -292,7 +292,18 @@ const BUILDERS: Record<StyleId, Builder> = {
     if (ah < 140) return null;
     const ax = v.side === "right" ? col.x + col.w * 0.15 : col.x + col.w - aw - col.w * 0.15;
     const a = arrow(ax, top, aw, ah, v.side === "left", v.accent);
-    return doc(input.headline, "reaction-arrow", [backdrop(v.bg), f, t, a]);
+    return doc(input.headline, "reaction-arrow", f ? [backdrop(v.bg), f, t, a] : [backdrop(v.bg), t, a]);
+  },
+  caption: (input, v) => {
+    // No face: your words are the picture, big over the gameplay, top-left or centred low.
+    const low = v.side === "left";
+    const fit = fitText(input.headline, { family: "Lato", maxW: low ? W - 2 * M : W * 0.74, maxH: H * (low ? 0.4 : 0.5), maxLines: 3, uppercase: true, strokeRatio: 0.09, lineHeight: 1.02, maxSize: 170 });
+    if (!fit) return null;
+    const h = fit.size * 1.02 * fit.lines.length;
+    const t = low
+      ? caption("", fit, W / 2, H - M - 70 - h, { family: "Lato", align: "middle", color: v.captionColor, lineHeight: 1.02 })
+      : caption("", fit, M, M, { family: "Lato", color: v.captionColor, lineHeight: 1.02 });
+    return doc(input.headline, "caption", [backdrop(v.bg), t]);
   },
   rules: (input, v) => {
     const lines = (input.lines ?? []).map(sentence).filter(Boolean).slice(0, 5);
@@ -328,14 +339,14 @@ const BUILDERS: Record<StyleId, Builder> = {
     return doc(word, "big-word", layers);
   },
   question: (input, v) => {
-    if (!v.cut || !/\?\s*$/.test(input.headline)) return null;
-    const f = face(v.cut, v.side, 0.9);
-    const col = textColumn(f, v.side);
+    if (!/\?\s*$/.test(input.headline)) return null;
+    const f = v.cut ? face(v.cut, v.side, 0.9) : null;
+    const col = f ? textColumn(f, v.side) : { x: M, w: W * 0.7 };
     const q = titleCase(input.headline).replace(/\?+$/, "?");
     const fit = fitText(q, { family: "Lato", maxW: col.w, maxH: H * 0.5, maxLines: 3, strokeRatio: 0.09, lineHeight: 1.04, maxSize: 140 });
     if (!fit) return null;
     const t = caption(fit.lines.join(" "), fit, v.side === "right" ? col.x : col.x + col.w, M + 10, { family: "Lato", align: v.side === "right" ? "start" : "end", lineHeight: 1.04, color: v.captionColor });
-    return doc(q, "question", [backdrop(v.bg), f, t]);
+    return doc(q, "question", f ? [backdrop(v.bg), f, t] : [backdrop(v.bg), t]);
   },
   error: (input, v) => {
     const title = (input.errorTitle ?? "").trim();
@@ -455,6 +466,12 @@ export function composeConcepts(input: ComposeInput): ComposeResult {
   const order: StyleId[] = [];
   if (ref) order.push(ref.styleId);
   for (const s of THUMB_STYLES) if (!order.includes(s.id) && (input.experimental || !s.experimental)) order.push(s.id);
+  // With a cut-out, the face-free layout comes after the ones that use you (but still offered when there's room).
+  if (input.cutouts.length && order.includes("caption") && ref?.styleId !== "caption") {
+    order.splice(order.indexOf("caption"), 1);
+    const firstExp = order.findIndex((x) => STYLE_BY_ID.get(x)!.experimental);
+    order.splice(firstExp < 0 ? order.length : firstExp, 0, "caption");
+  }
   // When you ask for something different, keep room for at least two experiments.
   const wantExperiments = input.experimental ? Math.min(2, count - 1) : 0;
 
@@ -493,8 +510,16 @@ export function composeConcepts(input: ComposeInput): ComposeResult {
       style,
       doc: d,
       issues,
-      why: style.seenIn.length ? `Like your "${style.seenIn[0]}" thumbnail${style.seenIn.length > 1 ? ` (and ${style.seenIn.length - 1} more)` : ""}.` : "A different direction, not seen on your channel yet.",
+      why:
+        (style.seenIn.length ? `Like your "${style.seenIn[0]}" thumbnail${style.seenIn.length > 1 ? ` (and ${style.seenIn.length - 1} more)` : ""}.` : "A different direction, not seen on your channel yet.") +
+        (style.needs.face !== "none" && !d.layers.some((l) => l.role === "face") ? " This one is without your face." : ""),
     });
+  }
+  // Without a face, few of your usual styles apply; the experimental ones (which don't need one) fill in.
+  if (concepts.length < 3 && !input.experimental && !input.cutouts.length) {
+    const more = composeConcepts({ ...input, experimental: true, count: 3, reference: null });
+    for (const c of more.concepts) if (concepts.length < 3 && c.style.experimental && !concepts.some((x) => x.style.id === c.style.id)) concepts.push(c);
+    if (concepts.some((c) => c.style.experimental)) notes.push("With no cut-out of you, some experimental styles were added so you still get three to choose from.");
   }
   if (concepts.length < count && unmet.length) notes.push(`More styles open up with a few more words: ${unmet.join(", ")}.`);
   if (dropped.length) notes.push(`Skipped because they didn't fit cleanly: ${dropped.join("; ")}.`);

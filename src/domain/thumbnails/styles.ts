@@ -2,7 +2,7 @@
 // Each style lists the uploads it was seen in, so "why" is always traceable
 // to your own thumbnails. Nothing here is a generic YouTube template.
 
-export type StyleId = "reaction" | "reaction-arrow" | "rules" | "big-word" | "question" | "error" | "wordart" | "tilted" | "split";
+export type StyleId = "reaction" | "reaction-arrow" | "caption" | "rules" | "big-word" | "question" | "error" | "wordart" | "tilted" | "split";
 
 export interface ThumbStyle {
   id: StyleId;
@@ -28,10 +28,18 @@ export const THUMB_STYLES: ThumbStyle[] = [
   {
     id: "reaction-arrow",
     name: "Reaction + arrow",
-    look: "Like Reaction, with a red curved arrow (black outline) pointing at something in the game.",
+    look: "Like Reaction, with a red curved arrow (black outline) pointing at something in the game. Works without your face too.",
     seenIn: ["I tried to eat all the food in Minecraft!", "Project Zomboid but I can't leave my house", "Night Factory is TERRIFYING"],
     experimental: false,
-    needs: { background: true, face: "required" },
+    needs: { background: true, face: "optional" },
+  },
+  {
+    id: "caption",
+    name: "Words over gameplay",
+    look: "No face: your words big and outlined over the screenshot, the way your Pacifist thumbnail lets the words be the picture.",
+    seenIn: ["Project Zomboid but I'm a Pacifist"],
+    experimental: false,
+    needs: { background: true, face: "none" },
   },
   {
     id: "rules",
@@ -52,10 +60,10 @@ export const THUMB_STYLES: ThumbStyle[] = [
   {
     id: "question",
     name: "Question",
-    look: "A short question in big letters next to your face.",
+    look: "A short question in big letters, next to your face when there is one.",
     seenIn: ["Small Brain Plays Project Zomboid"],
     experimental: false,
-    needs: { background: true, face: "required" },
+    needs: { background: true, face: "optional" },
   },
   {
     id: "error",

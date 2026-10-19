@@ -36,7 +36,7 @@ import { mimeForPath } from "../../lib/base64.ts";
 import { Button, Check, Dialog, Note, Segmented, Select, Splitter, usePaneWidth } from "../../ui/kit.tsx";
 import { Icon } from "../../ui/icons.tsx";
 import { bytesToBase64, docToOra, docToPng, docToPsd, fitText, imageSize } from "./raster.ts";
-import { preloadPageFonts } from "./fonts.ts";
+import { fontCssFor, preloadPageFonts } from "./fonts.ts";
 
 type Handle = "nw" | "n" | "ne" | "e" | "se" | "s" | "sw" | "w" | "rot";
 interface DragState {
@@ -507,7 +507,7 @@ export function Editor(props: EditorProps) {
     try {
       if (kind === "png") await platform.files.writeBinary(path, bytesToBase64(await docToPng(doc)));
       if (kind === "psd") await platform.files.writeBinary(path, bytesToBase64(await docToPsd(doc)));
-      if (kind === "svg") await platform.files.writeText(path, docToSvg(doc));
+      if (kind === "svg") await platform.files.writeText(path, docToSvg(doc, { fontCss: await fontCssFor(doc) }));
       if (kind === "ora") await platform.files.writeBinary(path, bytesToBase64(await docToOra(doc)));
       if (kind === "cthumb") await platform.files.writeText(path, serializeDoc(doc));
       toast("EXPORTED", path);
@@ -775,7 +775,7 @@ export function Editor(props: EditorProps) {
               <Button disabled={busy} onClick={() => void exportFile("svg")}>
                 SVG
               </Button>
-              <span className="small">Vector with live text, for Inkscape or Affinity Designer. Uses the bundled fonts, so install them (they're in the app's fonts folder) for exact lettering.</span>
+              <span className="small">Vector with live text and its fonts embedded, for Inkscape, Affinity Designer or a browser.</span>
             </div>
             <div className="row nowrap">
               <Button disabled={busy} onClick={() => void exportFile("ora")}>

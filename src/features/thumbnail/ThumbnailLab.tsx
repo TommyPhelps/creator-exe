@@ -15,7 +15,7 @@ import { Icon } from "../../ui/icons.tsx";
 import { Editor } from "./Editor.tsx";
 import { ThumbImg } from "../ChannelDna.tsx";
 import { docPreview } from "./raster.ts";
-import { IMAGE_EXTENSIONS, cutOutPhoto, fetchThumbnail, fileName, imageSize, prepareScreenshot, readImageFile } from "./images.ts";
+import { IMAGE_EXTENSIONS, cutOutPhoto, type CutPhoto, fetchThumbnail, fileName, imageSize, prepareScreenshot, readImageFile } from "./images.ts";
 import { preloadPageFonts } from "./fonts.ts";
 
 interface Open {
@@ -24,7 +24,17 @@ interface Open {
   doc: ThumbnailDoc;
 }
 
-type CutState = { phase: "consent"; paths: string[] } | { phase: "downloading"; paths: string[]; done: number; total: number } | { phase: "cutting"; index: number; count: number } | null;
+interface CutResult {
+  name: string;
+  r: CutPhoto;
+  keep: boolean;
+}
+type CutState =
+  | { phase: "consent"; paths: string[] }
+  | { phase: "downloading"; paths: string[]; done: number; total: number }
+  | { phase: "cutting"; index: number; count: number }
+  | { phase: "review"; items: CutResult[] }
+  | null;
 
 const MB = (n: number) => `${Math.round(n / 1_000_000)} MB`;
 
@@ -33,19 +43,32 @@ function useCutouts(onAdded: (a: ThumbAsset) => void) {
   const { db, platform, toast, changed } = useApp();
   const [state, setState] = useState<CutState>(null);
 
+  // The model finds the main subject; it can't tell a person from a very clear object.
+  // So every result is shown for you to keep or discard before it goes in the library.
   const cut = async (paths: string[]) => {
+    const items: CutResult[] = [];
     for (let i = 0; i < paths.length; i++) {
       setState({ phase: "cutting", index: i, count: paths.length });
       const path = paths[i]!;
       try {
         const r = await cutOutPhoto(platform, await readImageFile(platform, path));
-        const a = await addThumbAsset(db, { kind: "cutout", name: fileName(path), projectId: null, src: r.src, preview: r.preview, w: r.w, h: r.h, alphaBox: r.alphaBox });
-        onAdded(a);
+        items.push({ name: fileName(path), r, keep: true });
       } catch (e) {
         toast("CUT-OUT FAILED", `${fileName(path)}: ${e instanceof Error ? e.message : String(e)}`, "err");
       }
     }
+    setState(items.length ? { phase: "review", items } : null);
+  };
+
+  const saveReviewed = async (items: CutResult[]) => {
     setState(null);
+    for (const { name, r } of items.filter((x) => x.keep)) {
+      try {
+        onAdded(await addThumbAsset(db, { kind: "cutout", name, projectId: null, src: r.src, preview: r.preview, w: r.w, h: r.h, alphaBox: r.alphaBox }));
+      } catch (e) {
+        toast("ERROR", e instanceof Error ? e.message : String(e), "err");
+      }
+    }
     changed();
   };
 
@@ -97,6 +120,37 @@ function useCutouts(onAdded: (a: ThumbAsset) => void) {
           <span className="small dim">
             {MB(state.done)} of {MB(state.total)}
           </span>
+        </div>
+      </Dialog>
+    ) : state?.phase === "review" ? (
+      <Dialog
+        title="Check the cut-outs"
+        icon="image"
+        wide
+        onClose={() => setState(null)}
+        actions={
+          <>
+            <Button onClick={() => setState(null)}>Discard all</Button>
+            <Button variant="primary" disabled={!state.items.some((x) => x.keep)} onClick={() => void saveReviewed(state.items)}>
+              Keep {state.items.filter((x) => x.keep).length}
+            </Button>
+          </>
+        }
+      >
+        <p className="small dim">The cut-out keeps the main subject of each photo. Keep the ones that found you; discard any that kept something else.</p>
+        <div className="cut-review">
+          {state.items.map((it, k) => (
+            <label key={k} className={`cut-item ${it.keep ? "on" : ""}`}>
+              <span className="asset cut">
+                <img src={it.r.preview} alt={it.name} />
+              </span>
+              <Check checked={it.keep} onChange={(v) => setState({ phase: "review", items: state.items.map((x, j) => (j === k ? { ...x, keep: v } : x)) })}>
+                {it.name}
+              </Check>
+              {it.r.coverage >= 0.85 ? <span className="small" style={{ color: "var(--warn)" }}>Kept most of the photo; it may not have found a person.</span> : null}
+              {it.r.h < 500 ? <span className="small" style={{ color: "var(--warn)" }}>Small photo ({it.r.w}×{it.r.h}); it will look soft when large.</span> : null}
+            </label>
+          ))}
         </div>
       </Dialog>
     ) : state?.phase === "cutting" ? (
@@ -506,7 +560,7 @@ export function ThumbnailLab({ projectId, thumbnailId }: { projectId: string | n
             )}
           </Win>
 
-          <div className="row nowrap">
+          <div className="row">
             <Check checked={experimental} onChange={setExperimental}>
               Include experimental
             </Check>

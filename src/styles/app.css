@@ -558,3 +558,7 @@ input[type="range"] { accent-color: var(--accent); width: 100%; }
 /* Toolbars: selects size to their content. */
 .toolbar .select { width: auto; min-width: 150px; }
 .toolbar .check { margin: 0 6px; font-size: 13px; color: var(--text-dim); }
+.cut-review { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; }
+.cut-item { display: flex; flex-direction: column; gap: 6px; padding: 8px; border: 1px solid var(--border); background: var(--bg-2); }
+.cut-item.on { border-color: var(--accent); }
+.cut-item .asset { display: block; aspect-ratio: 3 / 4; }

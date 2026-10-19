@@ -14,7 +14,7 @@ export interface Box {
 
 export interface QualityIssue {
   level: "error" | "warn";
-  code: "off-canvas" | "edge" | "timestamp" | "overlap-face" | "overlap-text" | "overlap-accent" | "tiny" | "wordy" | "contrast" | "empty" | "small-face";
+  code: "off-canvas" | "edge" | "timestamp" | "overlap-face" | "overlap-text" | "overlap-accent" | "tiny" | "wordy" | "contrast" | "empty" | "small-face" | "low-res";
   message: string;
   layerIds: string[];
 }
@@ -125,11 +125,25 @@ export function checkDoc(doc: ThumbnailDoc): QualityIssue[] {
       }
     }
   }
+  for (const im of visible.filter((l): l is ImageLayer => l.type === "image" && l.opacity > 0.5)) {
+    const scale = upscale(im);
+    if (scale > 1.6) {
+      const what = im.role === "face" ? "Your photo" : im.role === "backdrop" ? "The screenshot" : `"${im.name}"`;
+      out.push({ level: "warn", code: "low-res", message: `${what} is enlarged ${scale.toFixed(1)}×, so it will look soft. A bigger original looks sharper.`, layerIds: [im.id] });
+    }
+  }
   for (const f of faces) {
     const v = visibleBox(f);
     if (v.h < THUMB_H * 0.35) out.push({ level: "warn", code: "small-face", message: "Your face is small; in your thumbnails it usually fills most of the height.", layerIds: [f.id] });
   }
   return out;
+}
+
+/** How much an image is enlarged on the 1280×720 canvas (1 = shown at its own pixel size). */
+export function upscale(l: ImageLayer): number {
+  const srcW = Math.max(1, l.naturalW * l.crop.w);
+  const srcH = Math.max(1, l.naturalH * l.crop.h);
+  return Math.max(l.w / srcW, l.h / srcH);
 }
 
 export function hasErrors(issues: QualityIssue[]): boolean {

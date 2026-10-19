@@ -131,3 +131,25 @@ test("schema v6 keeps a library of cut-outs and screenshots, and leaves old data
   await repo.deleteThumbAsset(db, a.id);
   assert.equal((await repo.listThumbAssets(db, "cutout")).length, 0);
 });
+
+test("upgrading a 0.1.3 database to schema v6 keeps every thumbnail and project exactly as it was", async () => {
+  const { memoryDb } = await import("./helpers/sqliteDb.ts");
+  const { migrate } = await import("../src/db/migrate.ts");
+  const { MIGRATIONS } = await import("../src/db/migrations.ts");
+  const repo = await import("../src/db/repos.ts");
+  const { newDoc, newText, serializeDoc, parseDoc } = await import("../src/domain/thumbnails/model.ts");
+  const db = memoryDb();
+  await migrate(db, MIGRATIONS.filter((m) => m.version <= 5));
+  const p = await repo.createProject(db, { title: "Morrowind with only the journal" });
+  const old = newDoc("v0.1.3 thumbnail");
+  old.version = 1;
+  old.layers.push({ ...newText("PLAYING MORROWIND", 90), fontFamily: "Impact" });
+  const t = await repo.saveThumbnail(db, { projectId: p.id, name: "old", doc: serializeDoc(old), preview: "data:image/jpeg;base64,AA" });
+  const r = await migrate(db);
+  assert.deepEqual(r.applied.map((x) => x.split(":")[0]), ["6"]);
+  const back = await repo.getThumbnail(db, t.id);
+  assert.equal(back!.doc, serializeDoc(old), "stored document untouched");
+  assert.equal(back!.projectId, p.id);
+  assert.equal(parseDoc(back!.doc).layers[1]!.type, "text");
+  assert.equal((await repo.getProject(db, p.id))!.title, "Morrowind with only the journal");
+});

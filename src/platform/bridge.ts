@@ -11,6 +11,10 @@ export interface PreviewBridge {
   /** The harness can answer file pickers and reads with its own sample files. */
   openFiles?(): Promise<string[]>;
   readBinary?(path: string): Promise<string>;
+  /** …and save dialogs and writes, so exports can be checked. */
+  saveFile?(defaultName: string): Promise<string | null>;
+  writeBinary?(path: string, base64: string): Promise<void>;
+  writeText?(path: string, contents: string): Promise<void>;
 }
 
 const unavailable = (what: string) => () => Promise.reject(new Error(`${what} is only available in the installed app`));
@@ -29,8 +33,8 @@ export function bridgePlatform(bridge: PreviewBridge): Platform {
     httpBinary: unavailable("Network access"),
     files: {
       createProjectFolders: unavailable("Folder creation"),
-      writeText: unavailable("Saving files"),
-      writeBinary: unavailable("Saving files"),
+      writeText: (path, contents) => (bridge.writeText ? bridge.writeText(path, contents) : Promise.reject(new Error("Saving files is only available in the installed app"))),
+      writeBinary: (path, b64) => (bridge.writeBinary ? bridge.writeBinary(path, b64) : Promise.reject(new Error("Saving files is only available in the installed app"))),
       readText: unavailable("Opening files"),
       readBinary: (path) => (bridge.readBinary ? bridge.readBinary(path) : Promise.reject(new Error("Opening files is only available in the installed app"))),
       exists: async () => false,
@@ -41,7 +45,7 @@ export function bridgePlatform(bridge: PreviewBridge): Platform {
     dialogs: {
       openFile: async () => null,
       openFiles: async () => (bridge.openFiles ? bridge.openFiles() : []),
-      saveFile: async () => null,
+      saveFile: async (_title, defaultName) => (bridge.saveFile ? bridge.saveFile(defaultName) : null),
       pickFolder: async () => null,
       pickProgram: async () => null,
     },
