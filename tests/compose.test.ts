@@ -105,3 +105,18 @@ test("v1 thumbnails still open and render; v2 fields survive a save", () => {
 test("every style is described with where it was seen", () => {
   for (const s of THUMB_STYLES) assert.ok(s.look.length > 20 && (s.experimental || s.seenIn.length > 0), s.id);
 });
+
+test("a cut-out cropped at one side is mirrored so the cut edge sits on the canvas edge, and no cut line shows at the bottom", () => {
+  const cropped = { src: PNG, w: 700, h: 900, alphaBox: { x: 0, y: 0.08, w: 0.8, h: 0.92 } };
+  for (let seed = 1; seed <= 8; seed++) {
+    const r = composeConcepts({ ...base, cutouts: [cropped], seed });
+    for (const c of r.concepts) {
+      for (const f of c.doc.layers.filter((l): l is ImageLayer => l.type === "image" && l.role === "face")) {
+        const v = visibleBox(f);
+        const touchesCut = f.flipX ? v.x + v.w : v.x;
+        assert.ok(touchesCut <= 2 || touchesCut >= THUMB_W - 2, `${c.id}: the cropped side is at a canvas edge (${Math.round(v.x)}..${Math.round(v.x + v.w)})`);
+        assert.ok(v.y + v.h >= THUMB_H + 8, "visible bottom bleeds past the frame");
+      }
+    }
+  }
+});

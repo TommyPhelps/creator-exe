@@ -168,11 +168,9 @@ pub fn postprocess(pred: &[f32]) -> Vec<u8> {
         .collect()
 }
 
-fn environment(app: &tauri::AppHandle) -> Result<&'static ort::environment::Environment, String> {
+fn environment(dll: &Path) -> Result<&'static ort::environment::Environment, String> {
     let r = ENV.get_or_init(|| {
-        let dll = runtime_path(app)
-            .ok_or_else(|| "ONNX Runtime is missing from this installation.".to_string())?;
-        ort::init_from(&dll)
+        ort::init_from(dll)
             .map_err(|e| format!("Could not load ONNX Runtime: {e}"))?
             .with_name("creator-exe")
             .build()
@@ -181,24 +179,20 @@ fn environment(app: &tauri::AppHandle) -> Result<&'static ort::environment::Envi
     r.as_ref().map_err(|e| e.clone())
 }
 
-/// Runs the model on 320×320 RGBA pixels (base64) and returns the mask (base64, one byte per pixel).
-pub fn run(app: &tauri::AppHandle, data_dir: &Path, rgba_b64: &str) -> Result<String, String> {
-    let rgba = base64::engine::general_purpose::STANDARD
-        .decode(rgba_b64)
-        .map_err(|e| e.to_string())?;
-    let input = preprocess(&rgba)?;
-    let mp = model_path(data_dir);
-    if !mp.exists() {
+/// Runs the model on 320×320 RGBA pixels and returns the 320×320 mask (one byte per pixel).
+pub fn infer(dll: &Path, model: &Path, rgba: &[u8]) -> Result<Vec<u8>, String> {
+    let input = preprocess(rgba)?;
+    if !model.exists() {
         return Err("The cutout model hasn't been downloaded yet.".into());
     }
-    let env = environment(app)?;
+    let env = environment(dll)?;
     let mut guard = SESSION
         .lock()
         .map_err(|_| "The cutout engine is busy.".to_string())?;
     if guard.is_none() {
         let session = ort::session::Session::builder(env)
             .map_err(|e| e.to_string())?
-            .commit_from_file(&mp)
+            .commit_from_file(model)
             .map_err(|e| format!("Could not load the cutout model: {e}"))?;
         *guard = Some(session);
     }
@@ -214,7 +208,17 @@ pub fn run(app: &tauri::AppHandle, data_dir: &Path, rgba_b64: &str) -> Result<St
     if pred.len() < SIZE * SIZE {
         return Err("The model returned an unexpected result.".into());
     }
-    let mask = postprocess(&pred[..SIZE * SIZE]);
+    Ok(postprocess(&pred[..SIZE * SIZE]))
+}
+
+/// Base64 in and out, for the Tauri command.
+pub fn run(app: &tauri::AppHandle, data_dir: &Path, rgba_b64: &str) -> Result<String, String> {
+    let rgba = base64::engine::general_purpose::STANDARD
+        .decode(rgba_b64)
+        .map_err(|e| e.to_string())?;
+    let dll = runtime_path(app)
+        .ok_or_else(|| "ONNX Runtime is missing from this installation.".to_string())?;
+    let mask = infer(&dll, &model_path(data_dir), &rgba)?;
     Ok(base64::engine::general_purpose::STANDARD.encode(mask))
 }
 
@@ -236,6 +240,50 @@ mod tests {
     fn postprocess_scales_to_bytes() {
         assert_eq!(postprocess(&[0.2, 0.6, 1.0]), vec![0, 128, 255]);
         assert_eq!(postprocess(&[0.5, 0.5]), vec![0, 0]);
+    }
+
+    /// Real inference with the bundled ONNX Runtime and the downloaded model.
+    /// CI sets CUTOUT_DLL and CUTOUT_MODEL; skipped elsewhere.
+    #[test]
+    fn real_model_runs_when_available() {
+        let (Ok(dll), Ok(model)) = (std::env::var("CUTOUT_DLL"), std::env::var("CUTOUT_MODEL"))
+        else {
+            eprintln!("CUTOUT_DLL/CUTOUT_MODEL not set; skipping the inference test");
+            return;
+        };
+        let bytes = std::fs::read(&model).expect("model readable");
+        assert_eq!(sha256_hex(&bytes), MODEL_SHA256, "model checksum");
+        // A light background with a dark, person-sized blob in the middle.
+        let mut px = vec![0u8; SIZE * SIZE * 4];
+        for y in 0..SIZE {
+            for x in 0..SIZE {
+                let i = (y * SIZE + x) * 4;
+                let dx = x as f32 - 160.0;
+                let dy = y as f32 - 150.0;
+                let head = dx * dx + dy * dy < 55.0 * 55.0;
+                let body = y > 190 && (dx.abs() < 110.0);
+                let v = if head || body { 60 } else { 225 };
+                px[i] = v;
+                px[i + 1] = v;
+                px[i + 2] = v;
+                px[i + 3] = 255;
+            }
+        }
+        let mask = infer(
+            std::path::Path::new(&dll),
+            std::path::Path::new(&model),
+            &px,
+        )
+        .expect("inference runs");
+        assert_eq!(mask.len(), SIZE * SIZE);
+        let lo = *mask.iter().min().unwrap();
+        let hi = *mask.iter().max().unwrap();
+        assert_eq!((lo, hi), (0, 255), "output is min-max scaled");
+        eprintln!(
+            "cutout inference ok: centre={} corner={}",
+            mask[150 * SIZE + 160],
+            mask[5 * SIZE + 5]
+        );
     }
 
     #[test]

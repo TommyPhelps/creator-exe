@@ -196,10 +196,15 @@ function face(c: Cutout, side: "left" | "right", heightFrac: number, o: { inset?
   const s = visibleH / Math.max(1, ab.h * c.h);
   const w = c.w * s;
   const h = c.h * s;
-  // Bottom of the visible pixels touches the bottom edge (a little bleed hides cut edges).
-  const y = H + 6 - (ab.y + ab.h) * h;
+  // Bottom of the visible pixels goes past the bottom edge, further than the sticker outline, so no cut line shows.
+  const y = H + 12 - (ab.y + ab.h) * h;
   const inset = o.inset ?? 0;
-  const x = side === "right" ? W + 4 - inset - (ab.x + ab.w) * w : -4 + inset - ab.x * w;
+  // If you touch one side of your photo (a cropped shoulder), mirror so that side faces the canvas edge.
+  const touchL = ab.x < 0.01;
+  const touchR = ab.x + ab.w > 0.99;
+  const flip = (side === "right" && touchL && !touchR) || (side === "left" && touchR && !touchL);
+  const ax = flip ? 1 - ab.x - ab.w : ab.x;
+  const x = side === "right" ? W + 4 - inset - (ax + ab.w) * w : -4 + inset - ax * w;
   return {
     id: layerId(),
     name: "Your face",
@@ -209,7 +214,7 @@ function face(c: Cutout, side: "left" | "right", heightFrac: number, o: { inset?
     naturalW: c.w,
     naturalH: c.h,
     crop: { x: 0, y: 0, w: 1, h: 1 },
-    flipX: false,
+    flipX: flip,
     x: Math.round(x),
     y: Math.round(y),
     w: Math.round(w),
@@ -422,6 +427,15 @@ function rng(seed: number): () => number {
   };
 }
 
+/** What a style needs from you when your words alone don't cover it. */
+const NEEDS: Partial<Record<StyleId, string>> = {
+  "big-word": "one big word",
+  question: "a caption that's a question",
+  error: "an error box program name",
+  split: "two split labels",
+  rules: "a rules list",
+};
+
 /** Three or more different concepts from your images and words. */
 export function composeConcepts(input: ComposeInput): ComposeResult {
   const notes: string[] = [];
@@ -442,6 +456,7 @@ export function composeConcepts(input: ComposeInput): ComposeResult {
 
   const concepts: Concept[] = [];
   const dropped: string[] = [];
+  const unmet: string[] = [];
   let i = 0;
   for (const id of order) {
     if (concepts.length >= count) break;
@@ -459,7 +474,10 @@ export function composeConcepts(input: ComposeInput): ComposeResult {
       captionColor: id === ref?.styleId && palette[0] ? palette[0] : "#ffffff",
     };
     const d = BUILDERS[id](input, variant);
-    if (!d) continue;
+    if (!d) {
+      if (NEEDS[id]) unmet.push(`${style.name} (${NEEDS[id]})`);
+      continue;
+    }
     const issues = checkDoc(d);
     if (hasErrors(issues)) {
       dropped.push(`${style.name}: ${issues.find((x) => x.level === "error")?.message ?? "failed a check"}`);
@@ -474,6 +492,7 @@ export function composeConcepts(input: ComposeInput): ComposeResult {
       why: style.seenIn.length ? `Like your "${style.seenIn[0]}" thumbnail${style.seenIn.length > 1 ? ` (and ${style.seenIn.length - 1} more)` : ""}.` : "A different direction, not seen on your channel yet.",
     });
   }
+  if (concepts.length < count && unmet.length) notes.push(`More styles open up with a few more words: ${unmet.join(", ")}.`);
   if (dropped.length) notes.push(`Skipped because they didn't fit cleanly: ${dropped.join("; ")}.`);
   if (concepts.length < 3) notes.push("Fewer than three concepts fit these inputs. A second screenshot, a cut-out photo of you, or a shorter caption gives more options.");
   return { concepts, notes };

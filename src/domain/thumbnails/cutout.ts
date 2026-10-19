@@ -124,7 +124,7 @@ export function alphaBounds(a: ArrayLike<number>, w: number, h: number, threshol
 }
 
 export interface CutResult {
-  rgba: Uint8ClampedArray;
+  rgba: Uint8ClampedArray<ArrayBuffer>;
   w: number;
   h: number;
   /** Visible part of the cut-out, as fractions of the (cropped) image. */

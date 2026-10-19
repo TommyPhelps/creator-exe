@@ -64,9 +64,9 @@ export interface CutPhoto extends PreparedImage {
 export async function cutOutPhoto(platform: Platform, src: string): Promise<CutPhoto> {
   const img = await loadImage(src);
   const size = workingSize(img.naturalWidth, img.naturalHeight);
-  const [full, fctx] = canvas(size.w, size.h);
+  const [, fctx] = canvas(size.w, size.h);
   fctx.drawImage(img, 0, 0, size.w, size.h);
-  const [small, sctx] = canvas(CUT_SIZE, CUT_SIZE);
+  const [, sctx] = canvas(CUT_SIZE, CUT_SIZE);
   sctx.drawImage(img, 0, 0, CUT_SIZE, CUT_SIZE);
   const smallPx = sctx.getImageData(0, 0, CUT_SIZE, CUT_SIZE).data;
   const mask = base64ToBytes(await platform.cutout.run(bytesToBase64(new Uint8Array(smallPx.buffer, smallPx.byteOffset, smallPx.byteLength))));

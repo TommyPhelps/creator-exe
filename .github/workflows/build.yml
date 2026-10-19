@@ -81,13 +81,28 @@ jobs:
       - name: Fetch ONNX Runtime (face cutout, pinned SHA-256)
         shell: bash
         run: scripts/fetch-onnxruntime.sh
+      - name: Cache the face-cutout model (test only; never bundled)
+        uses: actions/cache@v4
+        with:
+          path: ~/cutout-model
+          key: u2net-human-seg-01eb6a29a5c4d8ed
+      - name: Fetch the face-cutout model for the inference test
+        shell: bash
+        run: |
+          set -e
+          mkdir -p ~/cutout-model
+          f=~/cutout-model/u2net_human_seg.onnx
+          [ -f "$f" ] || curl -sSfL --retry 3 -o "$f" https://github.com/danielgatis/rembg/releases/download/v0.0.0/u2net_human_seg.onnx
+          echo "01eb6a29a5c4d8edb30b56adad9bb3a2a0535338e480724a213e0acfd2d1c73c  $f" | sha256sum -c -
       - name: Rust tests
         shell: bash
         run: |
           set -o pipefail
-          cargo test --manifest-path src-tauri/Cargo.toml --lib 2>&1 | tee rust-test.log \
+          export CUTOUT_DLL="$(pwd -W)/src-tauri/resources/onnxruntime.dll"
+          export CUTOUT_MODEL="$(cd ~/cutout-model && pwd -W)/u2net_human_seg.onnx"
+          cargo test --manifest-path src-tauri/Cargo.toml --lib -- --nocapture 2>&1 | tee rust-test.log \
             || { scripts/ci-annotate.sh error "cargo test failed" rust-test.log; exit 1; }
-          grep -E "^test result|^test " rust-test.log > rust-summary.log || true
+          grep -E "^test result|^test |cutout inference" rust-test.log > rust-summary.log || true
           scripts/ci-annotate.sh notice "cargo test passed" rust-summary.log
       - name: Build installers
         shell: bash
